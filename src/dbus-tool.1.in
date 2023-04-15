@@ -1,0 +1,168 @@
+.\" Manpage for dbus-tool
+.\" Contact @PACKAGE_BUGREPORT@ to correct errors or types.
+.TH dbus-tool 1 "" "@PACKAGE_STRING@" "User Commands"
+
+
+.SH NAME
+dbus-tool \- Command-line utility for executing DBus operations.
+
+
+.SH SYNOPSIS
+.B dbus-tool
+[OPTIONS...] COMMAND [command arguments...]
+
+
+.SH DESCRIPTION
+dbus-tool is a kind of swiss army knife of the DBus protocol. It can be used to probe objects and properties of services
+connected to the session/system DBus, calling methods, getting and setting properties of DBus services, and listening
+on DBus signals.
+
+
+.SH OPTIONS
+.TP
+.B -y, --system
+Connect to the system bus instead of the session bus.
+.TP
+.B -b, --bus=ADDRESS
+Connect to a specific bus address. Ignoring parameter -y, --system.
+.TP
+.B -t, --timeout=MILLISECONDS
+Set a specific timeout when waiting for message replies.
+.TP
+.B -h, --help
+Print help and exit.
+
+
+.SH COMMANDS
+
+.B list
+.RS 4
+List the bus names(services) on this connection.
+
+.B OPTIONS
+.nf
+.TP
+.B -a, --all
+Also include unique bus names.
+.TP
+.B -x, --activatable
+Instead of already connected names, list all names that can be activated on the bus.
+.RE
+
+.B call <service> <object_path> <interface> <method> [signature argument ...]
+.RS 4
+Call a specific method on an object in a DBus service.
+Any returned argument is printed to standard output.
+Arguments to the method begins with a DBus signature,
+then the argument value.
+If there is only a single argument, the signature can be
+omitted if the argument is a boolean(true|false), string, or
+a signed integer.
+.RE
+
+.B introspect <service> [object_path]
+.RS 4
+Print introspect data for a specific object in a DBus service.
+If the object_path arguments is omitted, the root object "/" is used.
+
+.B OPTIONS
+.nf
+.TP
+.B -r, --raw
+Don't parse the introspect data, print it "as is".
+.RE
+
+
+.B get <service> <object_path> <interface> [property]
+.RS 4
+Get(and print) the property of an object in a DBus service.
+If argument 'property' is omitted, the names and values of all properties are printed to standard output.
+
+.B OPTIONS
+.nf
+.TP
+.B -s, --signature
+Also print the DBus signature of the properties.
+.RE
+
+
+.B set <service> <object_path> <interface> <property> [value_signature] <value>
+.RS 4
+Set the property of an object in a DBus service.
+The signature of the value can omitted if the value is a boolean(true|false),
+string, or a signed integer.
+.RE
+
+.B objects <service> [object_path]
+.RS 4
+List all objects beloning to a specific service and object.
+If the object_path arguments is omitted, the root object "/" is used.
+.RE
+
+.B listen <service> <object_path> <interface> <signal>
+.RS 4
+Listen for a specific DBus signal.
+When a signal is received, is is printed to standard output.
+Stop listening and exit the program by pressing Ctrl-C.
+.RE
+
+.B start <service>
+.RS 4
+Try to launch the executable associated with a service name.
+
+.B OPTIONS
+.nf
+.TP
+.B -q, --quiet
+Suppress output, exit with 0 on success and 1 on falure.
+.RE
+
+
+.B owner <service>
+.RS 4
+Print the unique bus name of the primary owner of the name.
+.RE
+
+.B names <bus-name>
+.RS 4
+Print the names acquired by the bus connection.
+.RE
+
+.B ping <service>
+.RS 4
+Ping a service on the bus and print the response time in milliseconds.
+
+.B OPTIONS
+.nf
+.TP
+.B -q, --quiet
+Suppress output, exit with 0 on success and 1 on falure.
+.RE
+
+
+.B monitor
+.RS 4
+Monitor messages on the message bus and display them on standard output.
+.RE
+
+
+
+
+
+.SH NOTES
+In case of errors, an error message is written to standard output and the application returns 1.
+
+.SH EXAMPLES
+
+List all service on the session bus:
+.EX
+# dbus-tool list
+.EE
+
+Turn power off on the first bluetooth device in the system:
+.EX
+# dbus-tool -y set org.bluez /org/bluez/hci0 org.bluez.Adapter1 Powered false
+.EE
+
+.SH AUTHOR
+Dan Arrhenius (@PACKAGE_BUGREPORT@)
