@@ -17,10 +17,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 #include <ultrabus.hpp>
+#include <functional>
 #include <iostream>
 #include <iomanip>
 #include <string>
-#include <set>
+#include <map>
 #include <signal.h>
 
 #include "appargs_t.hpp"
@@ -29,6 +30,8 @@
 
 namespace ubus = ultrabus;
 using namespace std;
+
+using command_t = std::function<void (ubus::Connection&, appargs_t&)>;
 
 
 static void list_services (ubus::Connection& conn, appargs_t& opt);
@@ -46,6 +49,23 @@ static void monitor (ubus::Connection& conn, appargs_t& opt);
 static void send_signal (ubus::Connection& conn, appargs_t& opt);
 
 static std::unique_ptr<ubus::dbus_type> get_single_message_argument (const std::string& arg);
+
+
+static std::map<std::string, command_t> commands = {
+    {"list", list_services},
+    {"call", call_method},
+    {"introspect", introspect},
+    {"get", get_property},
+    {"set", set_property},
+    {"objects", objects},
+    {"listen", listen_for_signals},
+    {"start", start_service},
+    {"owner", print_owner},
+    {"names", print_names},
+    {"ping", ping},
+    {"monitor", monitor},
+    {"signal", send_signal},
+};
 
 
 
@@ -81,44 +101,12 @@ int main (int argc, char* argv[])
             }
         }
 
-        if (opt.cmd == "list") {
-            list_services (conn, opt);
-        }
-        else if (opt.cmd == "call") {
-            call_method (conn, opt);
-        }
-        else if (opt.cmd == "introspect") {
-            introspect (conn, opt);
-        }
-        else if (opt.cmd == "get") {
-            get_property (conn, opt);
-        }
-        else if (opt.cmd == "set") {
-            set_property (conn, opt);
-        }
-        else if (opt.cmd == "objects") {
-            objects (conn, opt);
-        }
-        else if (opt.cmd == "listen") {
-            listen_for_signals (conn, opt);
-        }
-        else if (opt.cmd == "start") {
-            start_service (conn, opt);
-        }
-        else if (opt.cmd == "owner") {
-            print_owner (conn, opt);
-        }
-        else if (opt.cmd == "names") {
-            print_names (conn, opt);
-        }
-        else if (opt.cmd == "ping") {
-            ping (conn, opt);
-        }
-        else if (opt.cmd == "monitor") {
-            monitor (conn, opt);
-        }
-        else if (opt.cmd == "signal") {
-            send_signal (conn, opt);
+        auto cmd = commands.find (opt.cmd);
+        if (cmd != commands.end()) {
+            cmd->second (conn, opt);
+        }else{
+            cerr << "Error: Unknown command (-h for help)." << endl;
+            exit (1);
         }
     }
     catch (std::exception& e) {
