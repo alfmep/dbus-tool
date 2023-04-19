@@ -159,6 +159,18 @@ Monitor messages on the message bus and display them on standard output.
 .RE
 
 
+.B signal <service> <object_path> <interface> <signal> [signature argument ...]
+.RS 4
+Send a DBus signal.
+This command will connect to the DBus and acquire the specified service name.
+Then it will send a signal with the specified object path and interface.
+Arguments to the signals begins with a DBus signature, then the argument value.
+If there is only a single argument, the signature can be
+omitted if the argument is a boolean(true|false), string, or
+a signed integer.
+.RE
+
+
 
 
 

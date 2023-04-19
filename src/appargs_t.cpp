@@ -118,6 +118,16 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << endl;
     out << "  monitor" << endl;
     out << "      Monitor messages on the message bus and display them on standard output." << endl;
+    out << endl;
+    out << "  signal <service> <object_path> <interface> <signal> [signature argument ...]" << endl;
+    out << "      Send a DBus signal." << endl;
+    out << "      This command will connect to the DBus and acquire the specified service name." << endl;
+    out << "      Then it will send a signal with the specified object path and interface." << endl;
+    out << "      Arguments to the signals begins with a DBus signature," << endl;
+    out << "      then the argument value." << endl;
+    out << "      If there is only a single argument, the signature can be" << endl;
+    out << "      omitted if the argument is a boolean(true|false), string, or" << endl;
+    out << "      a signed integer." << endl;
     exit (exit_code);
 }
 
@@ -321,6 +331,19 @@ appargs_t::appargs_t (int argc, char* argv[])
     else if (cmd == "monitor") {
         ;
     }
+    else if (cmd == "signal") {
+        if (optind > argc-4) {
+            cerr << "Error: too few arguments (--help for help)" << endl;
+            exit (1);
+        }
+        service = argv[optind++];
+        opath   = argv[optind++];
+        iface   = argv[optind++];
+        name    = argv[optind++]; // signal name
+        while (optind < argc)
+            args.emplace_back (argv[optind++]);
+    }
+
     if (optind < argc) {
         cerr << "Error: too many arguments (--help for help)" << endl;
         exit (1);

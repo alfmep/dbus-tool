@@ -43,6 +43,7 @@ static void print_owner (ubus::Connection& conn, appargs_t& opt);
 static void print_names (ubus::Connection& conn, appargs_t& opt);
 static void ping (ubus::Connection& conn, appargs_t& opt);
 static void monitor (ubus::Connection& conn, appargs_t& opt);
+static void send_signal (ubus::Connection& conn, appargs_t& opt);
 
 static std::unique_ptr<ubus::dbus_type> get_single_message_argument (const std::string& arg);
 
@@ -115,6 +116,9 @@ int main (int argc, char* argv[])
         }
         else if (opt.cmd == "monitor") {
             monitor (conn, opt);
+        }
+        else if (opt.cmd == "signal") {
+            send_signal (conn, opt);
         }
     }
     catch (std::exception& e) {
@@ -506,4 +510,55 @@ static void monitor (ubus::Connection& conn, appargs_t& opt)
         sleep (1);
 
     cout << "Done." << endl;
+}
+
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+static void send_signal (ubus::Connection& conn, appargs_t& opt)
+{
+    ubus::org_freedesktop_DBus dbus (conn, opt.timeout);
+
+    // Request a service name
+    //
+    auto result = dbus.request_name (opt.service);
+    if (result != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
+        if (!opt.quiet) {
+            if (result.err())
+                cerr << "Error: " << result.what() << endl;
+            else
+                cerr << "Error: Unable to request the service name." << endl;
+        }
+        exit (1);
+    }
+
+    // Create the signal
+    //
+    ubus::Message sig (opt.opath, opt.iface, opt.name);
+    auto num_args = opt.args.size ();
+    if (num_args) {
+        if (num_args == 1) {
+            sig << *get_single_message_argument(opt.args[0]);
+        }
+        else if (num_args & 0x01) {
+            std::cerr << "Error: Invalid argument format, missing signature or value." << std::endl;
+            exit (1);
+        }
+        else{
+            dbus_arg_parser p;
+            for (size_t i=0; i<num_args; i+=2) {
+                auto value = p (opt.args[i], opt.args[i+1]);
+                if (value) {
+                    sig << *value;
+                }else{
+                    std::cerr << "Error: Invalid argument format." << std::endl;
+                    exit (1);
+                }
+            }
+        }
+    }
+
+    // Send the signal
+    //
+    conn.send (sig);
 }
