@@ -87,10 +87,18 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "      List all objects beloning to a specific service and object." << endl;
     out << "      If the object_path arguments is omitted, the root object \"/\" is used." << endl;
     out << endl;
-    out << "  listen <service> <object_path> <interface> <signal>" << endl;
-    out << "      Listen for a specific DBus signal." << endl;
-    out << "      When a signal is received, is is printed to standard output." << endl;
+    out << "  listen <service> <object_path> <interface> [signal]" << endl;
+    out << "      Listen for a DBus signals from a DBus service." << endl;
+    out << "      <service> is the DBus service we want to receive signals from." << endl;
+    out << "      We will listen for signals from the specified object path using" << endl;
+    out << "      the specified interface." << endl;
+    out << "      If we specify a signal name, we will only listen for that signal." << endl;
+    out << "      If not, we will listen for all signals using that interface." << endl;
+    out << "      When a signal is received, it is printed to standard output." << endl;
     out << "      Stop listening and exit the program by pressing Ctrl-C." << endl;
+    out << "      Options:" << endl;
+    out << "          -s, --signature    When printing the signal arguments, also" << endl;
+    out << "                             print the DBus signature of the arguments." << endl;
     out << endl;
     out << "  start <service>" << endl;
     out << "      Try to launch the executable associated with a service name." << endl;
@@ -268,14 +276,17 @@ appargs_t::appargs_t (int argc, char* argv[])
             opath = "/";
     }
     else if (cmd == "listen") {
-        if (optind > argc-4) {
+        if (optind > argc-3) {
             cerr << "Error: too few arguments (--help for help)" << endl;
             exit (1);
         }
         service = argv[optind++];
         opath   = argv[optind++];
         iface   = argv[optind++];
-        name    = argv[optind++]; // signal name
+        if (optind < argc)
+            name = argv[optind++]; // A specific signal name
+        else
+            name = ""; // Any signal name
     }
     else if (cmd == "start") {
         quiet = be_quiet;

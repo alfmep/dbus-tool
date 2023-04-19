@@ -99,12 +99,25 @@ List all objects beloning to a specific service and object.
 If the object_path arguments is omitted, the root object "/" is used.
 .RE
 
-.B listen <service> <object_path> <interface> <signal>
+.B listen <service> <object_path> <interface> [signal]
 .RS 4
 Listen for a specific DBus signal.
+<service> is the DBus service we want to receive signals from.
+We will listen for signals from the specified object path using
+the specified interface.
+If we specify a signal name, we will only listen for that signal.
+If not, we will listen for all signals using that interface.
 When a signal is received, is is printed to standard output.
 Stop listening and exit the program by pressing Ctrl-C.
+
+.B OPTIONS
+.nf
+.TP
+.B -s, --signature
+When printing the signal arguments, also
+print the DBus signature of the arguments.
 .RE
+
 
 .B start <service>
 .RS 4

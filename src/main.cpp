@@ -359,7 +359,7 @@ static void listen_for_signals (ubus::Connection& conn, const appargs_t& opt)
     sa.sa_handler = stop_signal_handler;
     sigaction (SIGINT, &sa, nullptr);
 
-    int result = op.add_signal_callback (opt.iface, opt.name, [](ubus::Message &sig)
+    int result = op.add_signal_callback (opt.iface, opt.name, [&opt](ubus::Message &sig)
         {
             // Called from the connection worker thread
             cout << "Got signal: " << sig.name() << endl;
@@ -367,7 +367,10 @@ static void listen_for_signals (ubus::Connection& conn, const appargs_t& opt)
             if (!args.empty()) {
                 cout << "Arguments: " << endl;
                 for (auto& arg : args) {
-                    cout << "    " << arg->str() << endl;
+                    if (opt.print_signature)
+                        cout << "    " << arg->signature() << ' ' << arg->str() << endl;
+                    else
+                        cout << "    " << arg->str() << endl;
                 }
                 cout << endl;
             }
@@ -460,7 +463,7 @@ static void ping (ubus::Connection& conn, appargs_t& opt)
     auto result = peer.ping (opt.service);
     if (result.err()) {
         if (!opt.quiet)
-            cerr << "Fel: " << result.what() << endl;
+            cerr << "Error: " << result.what() << endl;
         exit (1);
     }
     if (!opt.quiet)
