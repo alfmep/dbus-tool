@@ -103,7 +103,7 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "  start <service>" << endl;
     out << "      Try to launch the executable associated with a service name." << endl;
     out << "      Options:" << endl;
-    out << "          -q, --quiet    Suppress output, exit with 0 on success and 1 on falure." << endl;
+    out << "          -q, --quiet    Suppress output, exit with 0 on success and 1 on failure." << endl;
     out << endl;
     out << "  owner <service>" << endl;
     out << "      Print the unique bus name of the primary owner of the service name." << endl;
@@ -114,7 +114,7 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "  ping <service>" << endl;
     out << "      Ping a service on the bus and print the response time in milliseconds." << endl;
     out << "      Options:" << endl;
-    out << "          -q, --quiet    Suppress output, exit with 0 on success and 1 on falure." << endl;
+    out << "          -q, --quiet    Suppress output, exit with 0 on success and 1 on failure." << endl;
     out << endl;
     out << "  monitor" << endl;
     out << "      Monitor messages on the message bus and display them on standard output." << endl;

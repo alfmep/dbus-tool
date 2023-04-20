@@ -127,7 +127,7 @@ Try to launch the executable associated with a service name.
 .nf
 .TP
 .B -q, --quiet
-Suppress output, exit with 0 on success and 1 on falure.
+Suppress output, exit with 0 on success and 1 on failure.
 .RE
 
 
@@ -149,7 +149,7 @@ Ping a service on the bus and print the response time in milliseconds.
 .nf
 .TP
 .B -q, --quiet
-Suppress output, exit with 0 on success and 1 on falure.
+Suppress output, exit with 0 on success and 1 on failure.
 .RE
 
 
