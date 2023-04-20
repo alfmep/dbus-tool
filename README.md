@@ -66,11 +66,14 @@ The signature of the value can omitted if the value is a boolean(true|false), st
 
 
 ### call
-**`dbus-tool [COMMON_OPTIONS] call <service> <object_path> <interface> <method> [signature argument...]`**
+**`dbus-tool [COMMON_OPTIONS] call [OPTIONS] <service> <object_path> <interface> <method> [signature argument...]`**
 
 Call a specific method in an object/interface in a DBus service.
 Any returned argument from the method is printed to standard output.
 Arguments to the method begins with a DBus signature, followed by the argument value. If there is only a single argument, the signature can be omitted if the argument is a boolean(true|false), string, or a signed integer.
+Options | Description
+--|--
+`-s`, `--signature` | When printing the signal arguments, also print the DBus signature of the arguments.
 
 
 ### signal

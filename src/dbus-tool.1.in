@@ -29,6 +29,9 @@ Connect to a specific bus address. Ignoring parameter -y, --system.
 .B -t, --timeout=MILLISECONDS
 Set a specific timeout when waiting for message replies.
 .TP
+.B -v, --version
+Print version and exit.
+.TP
 .B -h, --help
 Print help and exit.
 
@@ -58,6 +61,13 @@ then the argument value.
 If there is only a single argument, the signature can be
 omitted if the argument is a boolean(true|false), string, or
 a signed integer.
+
+.B OPTIONS
+.nf
+.TP
+.B -s, --signature
+When printing the reply arguments, also
+print the DBus signature of the arguments.
 .RE
 
 .B introspect <service> [object_path]

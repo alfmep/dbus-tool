@@ -63,6 +63,9 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "      If there is only a single argument, the signature can be" << endl;
     out << "      omitted if the argument is a boolean(true|false), string, or" << endl;
     out << "      a signed integer." << endl;
+    out << "      Options:" << endl;
+    out << "          -s, --signature    When printing the reply arguments, also" << endl;
+    out << "                             print the DBus signature of the arguments." << endl;
     out << endl;
     out << "  introspect <service> [object_path]" << endl;
     out << "      Print introspect data for a specific object in a DBus service." << endl;

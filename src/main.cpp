@@ -202,7 +202,10 @@ static void call_method (ubus::Connection& conn, const appargs_t& opt)
     }
     auto args = reply.arguments ();
     for (auto& arg : args) {
-        cout << arg->str() << endl;
+        if (opt.print_signature)
+            cout << arg->signature() << ' ' << arg->str() << endl;
+        else
+            cout << arg->str() << endl;
     }
 }
 
