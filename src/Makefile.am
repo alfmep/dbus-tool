@@ -32,10 +32,14 @@ endif
 
 bin_PROGRAMS = dbus-tool
 dbus_tool_SOURCES  =
+dbus_tool_SOURCES += appargs_t.hpp
 dbus_tool_SOURCES += appargs_t.cpp
+dbus_tool_SOURCES += dbus_arg_parser.hpp
 dbus_tool_SOURCES += dbus_arg_parser.cpp
+dbus_tool_SOURCES += print_introspect.hpp
 dbus_tool_SOURCES += print_introspect.cpp
 dbus_tool_SOURCES += main.cpp
+
 
 dist_man1_MANS  =
 dist_man1_MANS += dbus-tool.1
