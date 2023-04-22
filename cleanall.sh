@@ -11,6 +11,7 @@ rm -rf Makefile.in \
     config.sub \
     config.log \
     configure \
+    configure~ \
     depcomp \
     install-sh \
     ltmain.sh \
