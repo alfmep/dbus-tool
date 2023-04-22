@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-AC_INIT([dbus-tool], [0.9.1], [https://github.com/alfmep])
+AC_INIT([dbus-tool], [0.9.2], [https://github.com/alfmep])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign dist-bzip2])
 
 AC_PROG_CC
