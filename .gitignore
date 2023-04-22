@@ -9,6 +9,7 @@ config.log
 config.status
 config.sub
 configure
+configure~
 doxyfile.stamp
 doxygen.cfg
 install-sh
