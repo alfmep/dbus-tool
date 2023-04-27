@@ -358,6 +358,7 @@ static void listen_for_signals (ubus::Connection& conn, const appargs_t& opt)
         {
             // Called from the connection worker thread
             cout << "Got signal: " << sig.name() << endl;
+            cout << "Interface:  " << sig.interface() << endl;
             auto args = sig.arguments ();
             if (!args.empty()) {
                 cout << "Arguments: " << endl;
