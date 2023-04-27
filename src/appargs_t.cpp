@@ -351,4 +351,8 @@ appargs_t::appargs_t (int argc, char* argv[])
         cerr << "Error: too many arguments (--help for help)" << endl;
         exit (1);
     }
+
+    // Strip trailing '/' in the object path argument if it's not the root node
+    if (opath.length() > 1  &&  opath.back() == '/')
+        opath.pop_back ();
 }
