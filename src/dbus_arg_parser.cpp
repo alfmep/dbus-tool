@@ -373,11 +373,11 @@ ultrabus::dbus_struct dbus_arg_parser::parse_dbus_struct_arg_string (
     const char* buf_pos = value_buffer;
     const char* sig_buf = signature + 1; // Skip '(' in signature
 
-    if (*buf_pos != '(') {
+    if (*buf_pos != '{') {
         ok = false;
         return s;
     }
-    ++buf_pos; // Skip '(' in value buffer
+    ++buf_pos; // Skip '{' in value buffer
 
     while (true) {
         size_t sub_sig_len = signature_len (sig_buf);
@@ -395,7 +395,7 @@ ultrabus::dbus_struct dbus_arg_parser::parse_dbus_struct_arg_string (
         buf_pos += sub_len.second;
         sig_buf += sub_sig_len;
         if (*sig_buf == ')') {
-            ++sig_buf; // Skip '(' in signature buffer
+            ++sig_buf; // Skip ')' in signature buffer
             break;
         }
 
@@ -406,8 +406,8 @@ ultrabus::dbus_struct dbus_arg_parser::parse_dbus_struct_arg_string (
         ++buf_pos; // Skip ',' in value buffer
     }
 
-    if (*buf_pos == ')')
-        ++buf_pos; // Skip '(' in value buffer
+    if (*buf_pos == '}')
+        ++buf_pos; // Skip '}' in value buffer
     else
         ok = false;
 
@@ -480,11 +480,11 @@ ultrabus::dbus_dict_entry dbus_arg_parser::parse_dbus_dict_entry_arg_string (
     const char* sig_buf = signature + 1; // Skip '{' in signature buffer
     auto sub_len = std::make_pair<size_t, size_t> (0, 0);
 
-    if (*buf_pos != '{') {
+    if (*buf_pos != '(') {
         ok = false;
         return d;
     }
-    ++buf_pos; // Skip '{' in value buffer
+    ++buf_pos; // Skip '(' in value buffer
 
     // Get the signature of the key -- it must be a basic type !!!
     //
@@ -528,11 +528,11 @@ ultrabus::dbus_dict_entry dbus_arg_parser::parse_dbus_dict_entry_arg_string (
     d.value (*value);
     buf_pos += sub_len.second;
 
-    if (*buf_pos != '}') {
+    if (*buf_pos != ')') {
         ok = false;
         return d;
     }
-    ++buf_pos; // Skip '}' in value buffer
+    ++buf_pos; // Skip ')' in value buffer
 
     len.first = sig_buf - signature;
     len.second = buf_pos - value_buffer;
