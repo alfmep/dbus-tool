@@ -168,6 +168,7 @@ Signature | Type | Description
 `s` | string | A string. When passing string values, they must be enclosed by either double quotes `"` or single quotes `'`.
 `o` | object_path | An object path (string).
 `g` | signature | A DBus signature (string).
+
 And here are the 4 container types and their signatures:
 Signature | Type | Description
 :--|:--|:--
@@ -190,12 +191,17 @@ After the signature of the DBus argument comes the actual value of the argument.
 
 #### Numeric values
 Numeric values are written as normal numerical values.
+
 *Example:* `42`
+
 
 #### Boolean values
 Boolean values are written as `0`, `1`, `false`, or `true`.
+
 *Example:* `false`
+
 *Example:* `1`
+
 
 #### String values
 String values are written as UTF-8 strings enclosed by single or double quotes.
@@ -210,9 +216,14 @@ backspace | `\b` |
 reverse solidus | `\\` |
 double quote | `\"` | Only required when the string is enclosed by double quotes.
 single quote | `\'` | Only required when the string is enclosed by single quotes.
+
 *Example:* `"Hello World!"`
+
 *Example:* `'First line.\nSecond line.'`
+
 *Example:* `"This is a \"quoted\" word in a string."`
+
+
 ***Important Note!***
 When entering a string on the command line in a shell, the string command line argument needs to be enclosed by (double)quotes, or special characters escaped. So, on the command line in a bash shell, a DBus string value would be written as:
 `'"Hello World!"'`
@@ -224,62 +235,91 @@ or:
 
 #### Array values
 Array values are written as a sequence of item values separated by comma(`,`) and enclosed by `[` and `]`.
+
 *Example:* `[0,1,2,3]`
+
 *Example:* `[false,true,false,false,false,true]`
+
 *Example:* `["Array","of","strings"]`
+
 
 #### Struct values
 Struct values are written as a sequence of attribute values separated by comma(`,`) and enclosed by `{` and `}`.
-*Example (a struct with a string and an integer):* `{"Answer",42}`
-*Example (a struct with a boolean, an integer and a string):* `{true,42,"Hello World!"}`
+
+*Example (a struct with a string and an integer):*
+`{"Answer",42}`
+
+*Example (a struct with a boolean, an integer and a string):*
+`{true,42,"Hello World!"}`
+
 
 #### Dict entry values
 A dict entry value written as a key and value separated by comma(`,`) enclosed by `(` and `)`.
 Since a dice entry type is only permitted as an element type of an array, they can only written as array values.
+
 *Example (the key is an integer and the value a string):* `[(1,"first"),(2,"second")]`
+
 *Example (the key is a string and the value a boolean):* `[("array",true),("struct",false),("dict-entry",true)]`
+
 
 #### Variant values
 A variant is a special DBus type that can hold a value of any other DBus type. But since the dbus-tool must know what DBus type we are to send as the variant value, we must specify what value type we are sending. In order to do that we enter a prefix to the value. The prefix is the signature of the value followed by an underscore `_`.
+
 So in order to send a signed 32-bit integer as a variant value we write the value like this: `i_42`.
+
 *Example (we are sending a 32-bit signed integer as a variant value):* `i_42`
+
 *Example (a string as variant value):* `s_"Hello World!"`
+
 *Example (an array of 32-bit unsigned integers as variant value):* `au_[1,2,3,4]`
+
 *Example (an array of variants as variant value):* `av_[i_42,s_"string",b_true]`
+
 
 #### Examples of writing DBus arguments from a bash command line shell
 An example of a dbus-tool command that sends DBus arguments can look like this:
+
 `$ dbus-tool call my.example.service /object/path my.example.interface Method i 42`
 In the examples bellow we will, for clarity, shorten the part `my.example.service /object/path my.example.interface Method` to `...`.
 
 **Pass an integer from a bash shell:**
+
 `$ dbus-tool call ... i 42`
 
 **Pass a string from a bash shell:**
+
 `$ dbus-tool call ... s '"Hello World"'`
 
 **Pass an integer and a string from a bash shell:**
+
 `$ dbus-tool call ... i 42  s '"Hello World"'`
 
 **Pass an array of 32-bit signed integers from a bash shell:**
+
 `$ dbus-tool cal ... ai [1,2,3,4]`
 
 **Pass a struct with an unsigned integer and a string from a bash shell:**
+
 `$ dbus-tool call ... '(us)' '{42,"Answer"}'`
 
 **Pass a booelan, a signed integer, and a struct with an unsigned integer and a string as attributes from a bash shell:**
+
 `$ dbus-tool call ... b false  i  32  '(us)' '{42,"Answer"}'`
 
 **Pass an array of structs with a string and a boolean as attributes from a bash shell:**
+
 `$ dbus-tool call ... 'a(sb)' '["First",true,"Second",true,"Third",false]'`
 
 **Pass an array of arrays of integers from a bash shell:**
+
 `$ dbus-tool call ... aai [[0,1,2,3],[42,32],[3489,2343,23543,52326]]`
 
 **Pass an array of dict entries with strings as keys and booleans as values from a bash shell:**
+
 `$ dbus-tool call ... a{sb} '[("On",true),("Off",false),("Other",false)]'`
 
 **Pass an array of dict entries with integers as keys and variants as values from a bash shell:**
+
 `$ dbus-tool call ... a{iv} '[(0,i_42),(1,s_"Hello\nLine 2"),(2,ai_[1,2,3])]'`
 
 
