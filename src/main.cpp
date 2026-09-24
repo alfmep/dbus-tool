@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2023 Dan Arrhenius <dan@ultramarin.se>
+ * Copyright (C) 2021-2023,2026 Dan Arrhenius <dan@ultramarin.se>
  *
  * This file is part of dbus-tool.
  *
@@ -22,6 +22,10 @@
 #include <iomanip>
 #include <string>
 #include <map>
+#include <condition_variable>
+#include <mutex>
+#include <cstring>
+#include <unistd.h>
 #include <signal.h>
 
 #include "appargs_t.hpp"
@@ -31,51 +35,552 @@
 namespace ubus = ultrabus;
 using namespace std;
 
-using command_t = std::function<void (ubus::Connection&, appargs_t&)>;
+
+namespace {
+    using command_t = std::function<bool (ubus::connection&, appargs_t&)>;
+
+    bool list_services (ubus::connection& conn, appargs_t& opt);
+    bool call_method (ubus::connection& conn, const appargs_t& opt);
+    bool introspect (ubus::connection& conn, const appargs_t& opt);
+    bool get_property (ubus::connection& conn, const appargs_t& opt);
+    bool set_property (ubus::connection& conn, const appargs_t& opt);
+    bool objects (ubus::connection& conn, const appargs_t& opt);
+    bool listen_for_signals (ubus::connection& conn, const appargs_t& opt);
+    bool start_service (ubus::connection& conn, appargs_t& opt);
+    bool print_owner (ubus::connection& conn, appargs_t& opt);
+    bool print_names (ubus::connection& conn, appargs_t& opt);
+    bool ping (ubus::connection& conn, appargs_t& opt);
+    bool monitor (ubus::connection& conn, appargs_t& opt);
+    bool send_signal (ubus::connection& conn, appargs_t& opt);
+
+    std::unique_ptr<ubus::dbus_type> get_single_message_argument (const std::string& arg);
+
+    std::map<std::string, command_t> commands = {
+        {"list", list_services},
+        {"call", call_method},
+        {"introspect", introspect},
+        {"get", get_property},
+        {"set", set_property},
+        {"objects", objects},
+        {"listen", listen_for_signals},
+        {"start", start_service},
+        {"owner", print_owner},
+        {"names", print_names},
+        {"ping", ping},
+        {"monitor", monitor},
+        {"signal", send_signal},
+    };
 
 
-static void list_services (ubus::Connection& conn, appargs_t& opt);
-static void call_method (ubus::Connection& conn, const appargs_t& opt);
-static void introspect (ubus::Connection& conn, const appargs_t& opt);
-static void get_property (ubus::Connection& conn, const appargs_t& opt);
-static void set_property (ubus::Connection& conn, const appargs_t& opt);
-static void objects (ubus::Connection& conn, const appargs_t& opt);
-static void listen_for_signals (ubus::Connection& conn, const appargs_t& opt);
-static void start_service (ubus::Connection& conn, appargs_t& opt);
-static void print_owner (ubus::Connection& conn, appargs_t& opt);
-static void print_names (ubus::Connection& conn, appargs_t& opt);
-static void ping (ubus::Connection& conn, appargs_t& opt);
-static void monitor (ubus::Connection& conn, appargs_t& opt);
-static void send_signal (ubus::Connection& conn, appargs_t& opt);
-
-static std::unique_ptr<ubus::dbus_type> get_single_message_argument (const std::string& arg);
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    std::condition_variable cv;
+    std::mutex m;
+    volatile bool stop_sleep_loop = false;
+    void stop_signal_handler (int sig)
+    {
+        stop_sleep_loop = true;
+        cv.notify_one ();
+    }
 
 
-static std::map<std::string, command_t> commands = {
-    {"list", list_services},
-    {"call", call_method},
-    {"introspect", introspect},
-    {"get", get_property},
-    {"set", set_property},
-    {"objects", objects},
-    {"listen", listen_for_signals},
-    {"start", start_service},
-    {"owner", print_owner},
-    {"names", print_names},
-    {"ping", ping},
-    {"monitor", monitor},
-    {"signal", send_signal},
-};
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool list_services (ubus::connection& conn, appargs_t& opt)
+    {
+        auto names = opt.activatable ? conn.list_activatable_names(opt.timeout) : conn.list_names(opt.timeout);
+        if (names.err()) {
+            cerr << names.what() << endl;
+            return false;
+        }
+        for (auto& name : names.get()) {
+            if (opt.all || name[0]!=':')
+                cout << name << endl;
+        }
+        return true;
+    }
 
 
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    std::unique_ptr<ubus::dbus_type> get_single_message_argument (const std::string& arg)
+    {
+        std::unique_ptr<ubus::dbus_type> retval;
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static volatile bool continue_sleep_loop = true;
-static void stop_signal_handler (int sig)
-{
-    continue_sleep_loop = false;
-}
+        if (strcasecmp(arg.c_str(), "true") == 0) {
+            // Boolean true
+            retval.reset (new ubus::dbus_bool(true));
+        }
+        else if (strcasecmp(arg.c_str(), "false") == 0) {
+            // Boolean false
+            retval.reset (new ubus::dbus_bool(false));
+        }
+        else {
+            try {
+                // Try adding the argument as a signed 32-bit integer...
+                retval.reset (new ubus::dbus_i32(std::stoi(arg, nullptr, 0)));
+            }
+            catch (...) {
+                // ...no? Add the argument as a string
+                retval.reset (new ubus::dbus_string(arg));
+            }
+        }
+        return retval;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool call_method (ubus::connection& conn, const appargs_t& opt)
+    {
+        ubus::object_proxy op (conn, opt.service, opt.opath, opt.iface);
+        ubus::message msg (opt.service, opt.opath, opt.iface, opt.name);
+
+        auto num_args = opt.args.size ();
+        if (num_args == 0) {
+            ; // No arguments to the method call
+        }
+        else if (num_args == 1) {
+            msg.append_args (*get_single_message_argument(opt.args[0]));
+        }
+        else if (num_args & 0x01) {
+            // Un-even number of arguments
+            std::cerr << "Error: Invalid method call argument format, missing signature or value." << std::endl;
+            return false;
+        }
+        else{
+            dbus_arg_parser p;
+            for (size_t i=0; i<num_args; i+=2) {
+                auto value = p (opt.args[i], opt.args[i+1]);
+                if (value) {
+                    msg.append_args (*value);
+                }else{
+                    std::cerr << "Error: Invalid argument format." << std::endl;
+                    return false;
+                }
+            }
+        }
+
+        auto reply = conn.send_and_wait (msg, opt.timeout);
+        if (opt.json_output) {
+            cout << reply.to_json() << endl;
+        }else{
+            if (reply.is_error()) {
+                cerr << "Error: " << reply.error_name() << " - " << reply.error_msg() << endl;
+            }else{
+                auto args = reply.arguments ();
+                for (auto& arg : args) {
+                    if (opt.print_signature)
+                        cout << arg->signature() << ' ' << arg->to_string() << endl;
+                    else
+                        cout << arg->to_string() << endl;
+                }
+            }
+        }
+        return reply.is_error() == false;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool introspect (ubus::connection& conn, const appargs_t& opt)
+    {
+        ubus::org_freedesktop_DBus_Introspectable is (conn);
+        auto reply = is.introspect (opt.service, opt.opath, opt.timeout);
+        if (reply.err()) {
+            cerr << "Error: " << reply.what() << endl;
+        }
+        else if (opt.raw) {
+            cout << reply.get() << endl;
+        }else{
+            cout << "Service: " << opt.service << endl;
+            cout << "Object path: " << opt.opath << endl;
+            print_introspect (opt.opath, reply);
+        }
+        return reply.err() == false;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool get_property (ubus::connection& conn, const appargs_t& opt)
+    {
+        ubus::org_freedesktop_DBus_Properties properties (conn);
+
+        if (!opt.name.empty()) {
+            //
+            // Get a specific property
+            //
+            auto result = properties.get (opt.service, opt.opath, opt.iface, opt.name, opt.timeout);
+            if (result.err()) {
+                cerr << "Error: " << result.what() << endl;
+                return false;
+            }
+            ubus::dbus_type& value = result.get().get ();
+            if (opt.json_output) {
+                cout << value.to_json() << endl;
+            }else if (opt.print_signature) {
+                cout << value.signature() << ' ' << value.to_string() << endl;
+            }else{
+                cout << value.to_string() << endl;
+            }
+        }else{
+            //
+            // Get all properties
+            //
+            auto retval = properties.get_all (opt.service, opt.opath, opt.iface);
+            if (retval.err()) {
+                cerr << "Error: " << retval.what() << endl;
+                return false;
+            }
+
+            const auto& props = retval.get ();
+
+            if (opt.json_output) {
+                cout << props.to_json() << endl;
+                return true;
+            }
+            // Make a nice output format
+            size_t max_width = 1;
+            size_t max_sig_width = 1;
+            for (const auto& prop : props) {
+                const ubus::dbus_string& key = prop.first;
+                size_t len = key.get().size ();
+                if (len > max_width)
+                    max_width = len;
+                if (opt.print_signature) {
+                    const ubus::dbus_type& value = prop.second.is_variant() ?
+                        prop.second.cast<ubus::dbus_variant>().get() :
+                        prop.second;
+                    len = value.signature().size ();
+                    if (len > max_sig_width)
+                        max_sig_width = len;
+                }
+            }
+            for (const auto& prop : props) {
+                const ubus::dbus_string& key = prop.first;
+                const ubus::dbus_type& value = prop.second.is_variant() ?
+                    prop.second.cast<ubus::dbus_variant>().get() :
+                    prop.second;
+                if (opt.print_signature) {
+                    cout << setw(max_width) << key.get() << ' '
+                         << setw(max_sig_width) << value.signature() << ": "
+                         << value.to_string() << endl;
+                }else{
+                    cout << setw(max_width) << key.get() << ": " << value.to_string() << endl;
+                }
+            }
+        }
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool set_property (ubus::connection& conn, const appargs_t& opt)
+    {
+        ubus::org_freedesktop_DBus_Properties prop (conn);
+        std::unique_ptr<ubus::dbus_type> property_value;
+
+        if (opt.args.size() == 1) {
+            property_value = get_single_message_argument (opt.args[0]);
+        }else if (opt.args.size() == 2) {
+            dbus_arg_parser p;
+            property_value = p (opt.args[0], opt.args[1]);
+        }
+        if (!property_value) {
+            std::cerr << "Error: Invalid argument format." << std::endl;
+            return false;
+        }
+
+        auto result = prop.set (opt.service, opt.opath, opt.iface, opt.name, *property_value, opt.timeout);
+        if (result.err()) {
+            cerr << "Error: " << result.what() << endl;
+            return false;
+        }
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool objects (ubus::connection& conn, const appargs_t& opt)
+    {
+        ubus::org_freedesktop_DBus_ObjectManager om (conn);
+        auto reply = om.get_managed_objects (opt.service, opt.opath, opt.timeout);
+        if (reply.err()) {
+            cerr << "Error: " << reply.what() << endl;
+            return false;
+        }
+        for (const auto& entry : reply.get()) {
+            cout << entry.first << endl;
+            if (!opt.all)
+                continue;
+            for (const auto& if_entry : entry.second) {
+                cout << "    " << if_entry.first << endl;
+                for (const auto& prop : if_entry.second) {
+                    cout << "        " << prop.first.cast<ubus::dbus_string>().get() << endl;
+                }
+            }
+            cout << endl;
+        }
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool listen_for_signals (ubus::connection& conn, const appargs_t& opt)
+    {
+        // Install signal handler to exit gracefully on Ctrl-C
+        stop_sleep_loop = false;
+        struct sigaction sa;
+        memset (&sa, 0, sizeof(sa));
+        sigemptyset (&sa.sa_mask);
+        sa.sa_handler = stop_signal_handler;
+        sigaction (SIGINT, &sa, nullptr);
+
+        ubus::callback_message_filter cmf (conn);
+        cmf.set_signal_cb ([&opt, &conn](ubus::message& signal)->bool{
+            if (opt.json_output) {
+                cout << signal.to_json() << endl;
+            }else{
+                cout << "Signal       " << signal.name() << endl;
+                cout << "Sender:      " << signal.sender() << endl;
+                cout << "Object path: " << signal.path() << endl;
+                cout << "Interface:   " << signal.interface() << endl;
+                auto args = signal.arguments ();
+                if (!args.empty()) {
+                    cout << "Arguments: " << endl;
+                    for (auto& arg : args) {
+                        if (opt.print_signature)
+                            cout << "    " << arg->signature() << ' ' << arg->to_string() << endl;
+                        else
+                            cout << "    " << arg->to_string() << endl;
+                    }
+                }
+                cout << endl;
+            }
+            return true;
+        });
+        std::string rule ("type='signal'");
+        if ( ! opt.service.empty()) {
+            rule.append (",sender='");
+            rule.append (opt.service);
+            rule.push_back ('\'');
+        }
+        if ( ! opt.opath.empty()) {
+            if (opt.recursive)
+                rule.append (",path_namespace='");
+            else
+                rule.append (",path='");
+            rule.append (opt.opath);
+            rule.push_back ('\'');
+        }
+        if ( ! opt.iface.empty()) {
+            rule.append (",interface='");
+            rule.append (opt.iface);
+            rule.push_back ('\'');
+        }
+        if ( ! opt.name.empty()) {
+            rule.append (",member='");
+            rule.append (opt.name);
+            rule.push_back ('\'');
+        }
+        auto res = cmf.add_match (rule, opt.timeout);
+        if (res.err()) {
+            cerr << "Error: " << res.what() << endl;
+            return false;
+        }
+
+        // Sleep until Ctrl-C (SIGINT)
+        std::unique_lock ul (m);
+        cv.wait (ul, []{return stop_sleep_loop;});
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool start_service (ubus::connection& conn, appargs_t& opt)
+    {
+        auto result = conn.start_service_by_name (opt.service, opt.timeout);
+        if (result.err()) {
+            if (!opt.quiet)
+                cerr << result.what() << endl;
+            return false;
+        }
+        switch (result.get()) {
+        case DBUS_START_REPLY_SUCCESS:
+            if (!opt.quiet)
+                cout << opt.service << " started" << endl;
+            break;
+        case DBUS_START_REPLY_ALREADY_RUNNING:
+            if (!opt.quiet)
+                cout << opt.service << " already running" << endl;
+            break;
+        default:
+            if (!opt.quiet)
+                cerr << "Error: Unknown return value: " << result.get() << endl;
+            return false;
+        }
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool print_owner (ubus::connection& conn, appargs_t& opt)
+    {
+        auto owner = conn.get_name_owner (opt.service, opt.timeout);
+        if (owner.err()) {
+            cerr << owner.what() << endl;
+            return false;
+        }
+        cout << owner.get() << endl;
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool print_names (ubus::connection& conn, appargs_t& opt)
+    {
+        string bus_name = opt.service;
+        if (!opt.service.empty() && opt.service[0]!=':') {
+            auto owner = conn.get_name_owner (opt.service, opt.timeout);
+            if (owner.err()) {
+                cerr << owner.what() << endl;
+                return false;
+            }
+            bus_name = owner;
+        }
+        cout << bus_name << endl;
+
+        auto names = conn.list_names (opt.timeout);
+        for (auto& name : names.get()) {
+            if (name.empty() || name[0]==':')
+                continue;
+            auto owner = conn.get_name_owner (name, opt.timeout);
+            if (bus_name == owner.get())
+                cout << '\t' << name << endl;
+        }
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool ping (ubus::connection& conn, appargs_t& opt)
+    {
+        ubus::org_freedesktop_DBus_Peer peer (conn);
+
+        auto result = peer.ping (opt.service, opt.timeout);
+        if (result.err()) {
+            if (!opt.quiet)
+                cerr << "Error: " << result.what() << endl;
+            return false;
+        }
+        if (!opt.quiet)
+            cout << ((float)result.get()/1000) << " ms" << endl;
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool monitor (ubus::connection& conn, appargs_t& opt)
+    {
+        // Install signal handler to exit gracefully on Ctrl-C
+        stop_sleep_loop = false;
+        struct sigaction sa;
+        memset (&sa, 0, sizeof(sa));
+        sigemptyset (&sa.sa_mask);
+        sa.sa_handler = stop_signal_handler;
+        sigaction (SIGINT, &sa, nullptr);
+
+        ubus::callback_message_filter cmf (conn);
+        cmf.set_signal_cb ([](ubus::message& msg)->bool{
+            cout << msg.to_json() << endl;
+            return true;
+        });
+
+        bool use_eavesdrop = opt.eavesdrop;
+        if ( ! use_eavesdrop) {
+            auto result = conn.become_monitor (std::list<std::string>(), opt.timeout);
+            if (result.err()) {
+                cerr << "Warning: " << result.what() << endl;
+                cerr << "Install eavesdrop match rule to monitor messages instead." << endl;
+                use_eavesdrop = true;
+            }
+        }
+        if (use_eavesdrop)
+            cmf.add_match ("eavesdrop='true'", opt.timeout);
+
+        // Sleep until Ctrl-C (SIGINT)
+        std::unique_lock ul (m);
+        cv.wait (ul, []{return stop_sleep_loop;});
+        return true;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    bool send_signal (ubus::connection& conn, appargs_t& opt)
+    {
+        // Request a service name
+        //
+        if ( ! opt.service.empty()) {
+            auto result = conn.request_name (opt.service, opt.timeout);
+            if (result != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
+                if (!opt.quiet) {
+                    if (result.err())
+                        cerr << "Error: " << result.what() << endl;
+                    else
+                        cerr << "Error: Unable to request the service name." << endl;
+                }
+                return false;
+            }
+        }
+
+        // Create the signal
+        //
+        ubus::message signal (opt.opath, opt.iface, opt.name);
+        auto num_args = opt.args.size ();
+        if (num_args == 0) {
+            ; // No arguments to the signal
+        }
+        else if (num_args == 1) {
+            signal.append_args (*get_single_message_argument(opt.args[0]));
+        }
+        else if (num_args & 0x01) {
+            std::cerr << "Error: Invalid argument format, missing signature or value." << std::endl;
+            return false;
+        }
+        else{
+            dbus_arg_parser p;
+            for (size_t i=0; i<num_args; i+=2) {
+                auto value = p (opt.args[i], opt.args[i+1]);
+                if (value) {
+                    signal.append_args (*value);
+                }else{
+                    std::cerr << "Error: Invalid argument format." << std::endl;
+                    return false;
+                }
+            }
+        }
+
+        // Send the signal
+        //
+        if ( ! conn.send(signal)) {
+            cerr << "Error sending signal" << endl;
+            return false;
+        }
+        return true;
+    }
+
+
+} // Anonymous namespace
 
 
 //------------------------------------------------------------------------------
@@ -83,474 +588,39 @@ static void stop_signal_handler (int sig)
 int main (int argc, char* argv[])
 {
     appargs_t opt (argc, argv);
-    try {
-        ubus::Connection conn;
 
-        if (opt.bus_address.empty()) {
+    auto cmd = commands.find (opt.cmd);
+    if (cmd == commands.end()) {
+        cerr << "Error: Unknown command (-h for help)." << endl;
+        return 1;
+    }
+
+    int retval = 0;
+    try {
+        ubus::connection conn;
+
+        // if (opt.bus_address.empty()) {
             conn.connect (opt.bus);
             if (!conn.is_connected()) {
                 cerr << "Error: Failed to connect to " <<
                     (opt.bus==DBUS_BUS_SESSION?"session":"system") << " bus" << endl;
-                exit (1);
+                return 1;
             }
-        }else{
-            conn.connect (opt.bus_address, opt.timeout, true);
-            if (!conn.is_connected()) {
-                cerr << "Error: Failed to connect to bus " << opt.bus_address << endl;
-                exit (1);
-            }
-        }
+        // }else{
+        //     conn.connect (opt.bus_address, opt.timeout, true);
+        //     if (!conn.is_connected()) {
+        //         cerr << "Error: Failed connecting to bus " << opt.bus_address << endl;
+        //         return 1;
+        //     }
+        // }
 
-        auto cmd = commands.find (opt.cmd);
-        if (cmd != commands.end()) {
-            cmd->second (conn, opt);
-        }else{
-            cerr << "Error: Unknown command (-h for help)." << endl;
-            exit (1);
-        }
+        retval = cmd->second(conn, opt) ? 0 : 1;
     }
     catch (std::exception& e) {
         if (!opt.quiet)
-            cerr << "Error: " << e.what() << endl;
-        exit (1);
-    }
-
-    return 0;
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void list_services (ubus::Connection& conn, appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus dbus (conn, opt.timeout);
-    auto names = opt.activatable ? dbus.list_activatable_names() : dbus.list_names();
-    if (names.err()) {
-        cerr << names.what() << endl;
-        exit (1);
-    }
-    for (auto& name : names.get()) {
-        if (opt.all || name[0]!=':')
-            cout << name << endl;
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static std::unique_ptr<ubus::dbus_type> get_single_message_argument (const std::string& arg)
-{
-    std::unique_ptr<ubus::dbus_type> retval;
-
-    if (arg == "true") {
-        // Boolean true
-        retval.reset (new ubus::dbus_basic(true));
-    }
-    else if (arg == "false") {
-        // Boolean false
-        retval.reset (new ubus::dbus_basic(false));
-    }
-    else {
-        try {
-            // Signed 32-bit integer
-            retval.reset (new ubus::dbus_basic(std::stoi(arg, nullptr, 0)));
-        }
-        catch (...) {
-            // String
-            retval.reset (new ubus::dbus_basic(arg));
-        }
+            cerr << "Error - exception caught: " << e.what() << endl;
+        retval = 1;
     }
 
     return retval;
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void call_method (ubus::Connection& conn, const appargs_t& opt)
-{
-    ubus::ObjectProxy op (conn, opt.service, opt.opath, opt.iface, opt.timeout);
-    ubus::Message msg (opt.service, opt.opath, opt.iface, opt.name);
-
-    auto num_args = opt.args.size ();
-    if (num_args) {
-        if (num_args == 1) {
-            msg << *get_single_message_argument(opt.args[0]);
-        }
-        else if (num_args & 0x01) {
-            std::cerr << "Error: Invalid argument format, missing signature or value." << std::endl;
-            exit (1);
-        }
-        else{
-            dbus_arg_parser p;
-            for (size_t i=0; i<num_args; i+=2) {
-                auto value = p (opt.args[i], opt.args[i+1]);
-                if (value) {
-                    msg << *value;
-                }else{
-                    std::cerr << "Error: Invalid argument format." << std::endl;
-                    exit (1);
-                }
-            }
-        }
-    }
-
-    auto reply = op.send_msg (msg);
-    if (reply.is_error()) {
-        cerr << "Error: " << reply.error_name() << " - " << reply.error_msg() << endl;
-        exit (1);
-    }
-    auto args = reply.arguments ();
-    for (auto& arg : args) {
-        if (opt.print_signature)
-            cout << arg->signature() << ' ' << arg->str() << endl;
-        else
-            cout << arg->str() << endl;
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void introspect (ubus::Connection& conn, const appargs_t& opt)
-{
-    ubus::ObjectProxy op (conn, opt.service, opt.opath, DBUS_INTERFACE_INTROSPECTABLE, opt.timeout);
-    auto reply = op.call ("Introspect");
-    if (reply.is_error()) {
-        cerr << "Error: " << reply.error_name() << " - " << reply.error_msg() << endl;
-        exit (1);
-    }
-
-    ubus::dbus_basic xml_doc;
-    if (reply.get_args(&xml_doc, nullptr)) {
-        if (opt.raw) {
-            cout << xml_doc.str() << endl;
-        }else{
-            cout << "Service: " << opt.service << endl;
-            cout << "Object path: " << opt.opath << endl;
-            print_introspect (opt.opath, xml_doc.str());
-        }
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void get_property (ubus::Connection& conn, const appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus_Properties properties (conn, opt.timeout);
-
-    if (!opt.name.empty()) {
-        //
-        // Get a specific property
-        //
-        auto result = properties.get (opt.service, opt.opath, opt.iface, opt.name);
-        if (result.err()) {
-            cerr << "Error: " << result.what() << endl;
-            exit (1);
-        }
-        if (opt.print_signature)
-            cout << result.get().value().signature() << ' ' << result.get().str() << endl;
-        else
-            cout << result.get().str() << endl;
-    }else{
-        //
-        // Get all properties
-        //
-        auto props = properties.get_all (opt.service, opt.opath, opt.iface);
-        if (props.err()) {
-            cerr << "Error: " << props.what() << endl;
-            exit (1);
-        }
-
-        // Make a nice output format
-        size_t max_width = 1;
-        size_t max_sig_width = 1;
-        for (auto& prop : props.get().data()) {
-            auto& de = dynamic_cast<ubus::dbus_dict_entry&> (prop);
-            size_t len = de.key().str().size ();
-            if (len > max_width)
-                max_width = len;
-            if (opt.print_signature) {
-                auto& v = dynamic_cast<ubus::dbus_variant&>(de.value());
-                len = v.value().signature().size ();
-                if (len > max_sig_width)
-                    max_sig_width = len;
-            }
-        }
-        for (auto& prop : props.get().data()) {
-            auto& de = dynamic_cast<ubus::dbus_dict_entry&> (prop);
-            if (opt.print_signature) {
-                auto& v = dynamic_cast<ubus::dbus_variant&>(de.value());
-                cout << setw(max_width) << de.key().str() << ' '
-                     << setw(max_sig_width) << v.value().signature() << ": "
-                     << v.str() << endl;
-            }else{
-                cout << setw(max_width) << de.key().str() << ": " << de.value().str() << endl;
-            }
-        }
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void set_property (ubus::Connection& conn, const appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus_Properties prop (conn, opt.timeout);
-    std::unique_ptr<ubus::dbus_type> property_value;
-
-    if (opt.args.size() == 1) {
-        property_value = get_single_message_argument (opt.args[0]);
-    }else{
-        dbus_arg_parser p;
-        property_value = p (opt.args[0], opt.args[1]);
-    }
-    if (!property_value) {
-        std::cerr << "Error: Invalid argument format." << std::endl;
-        exit (1);
-    }
-
-    auto result = prop.set (opt.service, opt.opath, opt.iface, opt.name, *property_value);
-    if (result.err()) {
-        cerr << "Error: " << result.what() << endl;
-        exit (1);
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void objects (ubus::Connection& conn, const appargs_t& opt)
-{
-    ubus::ObjectProxy op (conn, opt.service, opt.opath, "org.freedesktop.DBus.ObjectManager", opt.timeout);
-
-    auto reply = op.call ("GetManagedObjects");
-    if (reply.is_error()) {
-        cerr << "Error: " << reply.error_name() << " - " << reply.error_msg() << endl;
-        exit (1);
-    }
-    ubus::dbus_array dict;
-    if (reply.get_args(&dict, nullptr)) {
-        for (auto& entry : dict) {
-            auto& de = dynamic_cast<ubus::dbus_dict_entry&> (entry);
-            cout << de.key().str() << endl;
-        }
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void listen_for_signals (ubus::Connection& conn, const appargs_t& opt)
-{
-    ubus::ObjectProxy op (conn, opt.service, opt.opath, "", opt.timeout);
-
-    // Install signal handler to exit gracefully on Ctrl-C
-    continue_sleep_loop = true;
-    struct sigaction sa;
-    memset (&sa, 0, sizeof(sa));
-    sigemptyset (&sa.sa_mask);
-    sa.sa_handler = stop_signal_handler;
-    sigaction (SIGINT, &sa, nullptr);
-
-    int result = op.add_signal_callback (opt.iface, opt.name, [&opt](ubus::Message &sig)
-        {
-            // Called from the connection worker thread
-            cout << "Got signal: " << sig.name() << endl;
-            cout << "Interface:  " << sig.interface() << endl;
-            auto args = sig.arguments ();
-            if (!args.empty()) {
-                cout << "Arguments: " << endl;
-                for (auto& arg : args) {
-                    if (opt.print_signature)
-                        cout << "    " << arg->signature() << ' ' << arg->str() << endl;
-                    else
-                        cout << "    " << arg->str() << endl;
-                }
-                cout << endl;
-            }
-        });
-    if (result) {
-        cerr << "Error adding signal listener" << endl;
-        exit (1);
-    }else{
-        while (continue_sleep_loop)
-            sleep (1);
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void start_service (ubus::Connection& conn, appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus dbus (conn, opt.timeout);
-    auto result = dbus.start_service_by_name (opt.service);
-    if (result.err()) {
-        if (!opt.quiet)
-            cerr << result.what() << endl;
-        exit (1);
-    }
-    switch (result.get()) {
-    case DBUS_START_REPLY_SUCCESS:
-        if (!opt.quiet)
-            cout << opt.service << " started" << endl;
-        break;
-    case DBUS_START_REPLY_ALREADY_RUNNING:
-        if (!opt.quiet)
-            cout << opt.service << " already running" << endl;
-        break;
-    default:
-        if (!opt.quiet)
-            cerr << "Error: Unknown return value: " << result.get() << endl;
-        exit (1);
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void print_owner (ubus::Connection& conn, appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus dbus (conn, opt.timeout);
-    auto owner = dbus.get_name_owner (opt.service);
-    if (owner.err()) {
-        cerr << owner.what() << endl;
-        exit (1);
-    }
-    cout << owner.get() << endl;
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void print_names (ubus::Connection& conn, appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus dbus (conn, opt.timeout);
-    string bus_name = opt.service;
-    if (!opt.service.empty() && opt.service[0]!=':') {
-        auto owner = dbus.get_name_owner (opt.service);
-        if (owner.err()) {
-            cerr << owner.what() << endl;
-            exit (1);
-        }
-        bus_name = owner;
-    }
-    cout << bus_name << endl;
-
-    auto names = dbus.list_names();
-    for (auto& name : names.get()) {
-        if (name.empty() || name[0]==':')
-            continue;
-        auto owner = dbus.get_name_owner (name);
-        if (bus_name == owner.get())
-            cout << '\t' << name << endl;
-    }
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void ping (ubus::Connection& conn, appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus_Peer peer (conn, opt.timeout);
-
-    auto result = peer.ping (opt.service);
-    if (result.err()) {
-        if (!opt.quiet)
-            cerr << "Error: " << result.what() << endl;
-        exit (1);
-    }
-    if (!opt.quiet)
-        cout << ((float)result.get()/1000) << " ms" << endl;
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void monitor (ubus::Connection& conn, appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus dbus (conn, opt.timeout);
-    ubus::CallbackMessageHandler cmh (conn);
-
-    auto result = dbus.become_monitor ();
-    if (result.err()) {
-        cerr << "Warning: " << result.what() << endl;
-        cerr << "Install eavesdrop match rule to monitor messages instead." << endl;
-        cmh.add_match_rule ("eavesdrop='true'");
-    }
-
-    // Install signal handler to exit gracefully on Ctrl-C
-    continue_sleep_loop = true;
-    struct sigaction sa;
-    memset (&sa, 0, sizeof(sa));
-    sigemptyset (&sa.sa_mask);
-    sa.sa_handler = stop_signal_handler;
-    sigaction (SIGINT, &sa, nullptr);
-
-    // Install message callback function
-    cmh.set_message_cb ([](ubus::Message& msg)->bool
-        {
-            cout << msg.describe() << endl;
-            cout << endl;
-            return true;
-        });
-
-    // Sleep until Ctrl-C (SIGINT)
-    while (continue_sleep_loop)
-        sleep (1);
-
-    cout << "Done." << endl;
-}
-
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void send_signal (ubus::Connection& conn, appargs_t& opt)
-{
-    ubus::org_freedesktop_DBus dbus (conn, opt.timeout);
-
-    // Request a service name
-    //
-    auto result = dbus.request_name (opt.service);
-    if (result != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
-        if (!opt.quiet) {
-            if (result.err())
-                cerr << "Error: " << result.what() << endl;
-            else
-                cerr << "Error: Unable to request the service name." << endl;
-        }
-        exit (1);
-    }
-
-    // Create the signal
-    //
-    ubus::Message sig (opt.opath, opt.iface, opt.name);
-    auto num_args = opt.args.size ();
-    if (num_args) {
-        if (num_args == 1) {
-            sig << *get_single_message_argument(opt.args[0]);
-        }
-        else if (num_args & 0x01) {
-            std::cerr << "Error: Invalid argument format, missing signature or value." << std::endl;
-            exit (1);
-        }
-        else{
-            dbus_arg_parser p;
-            for (size_t i=0; i<num_args; i+=2) {
-                auto value = p (opt.args[i], opt.args[i+1]);
-                if (value) {
-                    sig << *value;
-                }else{
-                    std::cerr << "Error: Invalid argument format." << std::endl;
-                    exit (1);
-                }
-            }
-        }
-    }
-
-    // Send the signal
-    //
-    conn.send (sig);
 }

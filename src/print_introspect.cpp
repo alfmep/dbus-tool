@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021,2023 Dan Arrhenius <dan@ultramarin.se>
+ * Copyright (C) 2021,2023,2026 Dan Arrhenius <dan@ultramarin.se>
  *
  * This file is part of dbus-tool.
  *
@@ -76,13 +76,14 @@ struct object_t {
 };
 
 
-static void get_type_name (xmlNode* node, string& type, string& name);
-static void parse_method (xmlNode* root, method_t& method);
-static void parse_signal (xmlNode* root, method_t& signal);
-static void parse_prop (xmlNode* node, property_t& prop);
-static void parse_iface (xmlNode* root, iface_t& iface);
-static void parse_node (xmlNode* root, object_t& obj);
-
+namespace {
+    void get_type_name (xmlNode* node, string& type, string& name);
+    void parse_method (xmlNode* root, method_t& method);
+    void parse_signal (xmlNode* root, method_t& signal);
+    void parse_prop (xmlNode* node, property_t& prop);
+    void parse_iface (xmlNode* root, iface_t& iface);
+    void parse_node (xmlNode* root, object_t& obj);
+}
 
 
 
@@ -190,173 +191,181 @@ void print_introspect (const std::string& opath, const std::string& str)
             cout << "    " << node << endl;
         }
     }
+
+    xmlFreeDoc (doc);
 }
 
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void get_type_name (xmlNode* node, string& type, string& name)
-{
-    type = (const char*)node->name;
-    name = "";
-    xmlAttr* attr = node->properties;
-    while (attr) {
-        if (attr->name && strcmp((const char*)attr->name, "name")==0)
-            break;
-        attr = attr->next;
-    }
-    if (attr && attr->children && attr->children->content)
-        name = (const char*)attr->children->content;
-}
 
+namespace {
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void parse_method (xmlNode* root, method_t& method)
-{
-    for (xmlNode* node=root; node; node=node->next) {
-        if (node->type != XML_ELEMENT_NODE)
-            continue;
-        if (strcmp((const char*)node->name, "arg") !=0 )
-            continue;
-
-        string name = "";
-        string dir = "";
-        string signature = "";
-
-        for (xmlAttr* attr=node->properties; attr; attr=attr->next) {
-            if (attr->name && strcmp((const char*)attr->name, "name")==0) {
-                if (attr->children && attr->children->content)
-                    name = (const char*)attr->children->content;
-            }
-            else if (attr->name && strcmp((const char*)attr->name, "direction")==0) {
-                if (attr->children && attr->children->content)
-                    dir = (const char*)attr->children->content;
-            }
-            else if (attr->name && strcmp((const char*)attr->name, "type")==0) {
-                if (attr->children && attr->children->content)
-                    signature = (const char*)attr->children->content;
-            }
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void get_type_name (xmlNode* node, string& type, string& name)
+    {
+        type = (const char*)node->name;
+        name = "";
+        xmlAttr* attr = node->properties;
+        while (attr) {
+            if (attr->name && strcmp((const char*)attr->name, "name")==0)
+                break;
+            attr = attr->next;
         }
-        if (!dir.empty() && !signature.empty()) {
-            if (dir == "out") {
-                method.out.name = name;
-                method.out.sig = signature;
-            }else if (dir == "in") {
-                method.in.emplace_back (name, signature);
-            }
-        }
+        if (attr && attr->children && attr->children->content)
+            name = (const char*)attr->children->content;
     }
-}
 
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void parse_signal (xmlNode* root, method_t& signal)
-{
-    for (xmlNode* node=root; node; node=node->next) {
-        if (node->type != XML_ELEMENT_NODE)
-            continue;
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void parse_method (xmlNode* root, method_t& method)
+    {
+        for (xmlNode* node=root; node; node=node->next) {
+            if (node->type != XML_ELEMENT_NODE)
+                continue;
+            if (strcmp((const char*)node->name, "arg") !=0 )
+                continue;
 
-        string type = (const char*)node->name;
-        string name = "";
-        string signature = "";
+            string name = "";
+            string dir = "";
+            string signature = "";
 
-        if (type == "arg") {
-            xmlAttr* attr = node->properties;
-            while (attr) {
+            for (xmlAttr* attr=node->properties; attr; attr=attr->next) {
                 if (attr->name && strcmp((const char*)attr->name, "name")==0) {
                     if (attr->children && attr->children->content)
                         name = (const char*)attr->children->content;
                 }
-                if (attr->name && strcmp((const char*)attr->name, "type")==0) {
+                else if (attr->name && strcmp((const char*)attr->name, "direction")==0) {
+                    if (attr->children && attr->children->content)
+                        dir = (const char*)attr->children->content;
+                }
+                else if (attr->name && strcmp((const char*)attr->name, "type")==0) {
                     if (attr->children && attr->children->content)
                         signature = (const char*)attr->children->content;
                 }
-                attr = attr->next;
             }
-            if (!signature.empty())
-                signal.in.emplace_back (name, signature);
+            if (!dir.empty() && !signature.empty()) {
+                if (dir == "out") {
+                    method.out.name = name;
+                    method.out.sig = signature;
+                }else if (dir == "in") {
+                    method.in.emplace_back (name, signature);
+                }
+            }
         }
     }
-}
 
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void parse_prop (xmlNode* node, property_t& prop)
-{
-    string type = (const char*)node->name;
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void parse_signal (xmlNode* root, method_t& signal)
+    {
+        for (xmlNode* node=root; node; node=node->next) {
+            if (node->type != XML_ELEMENT_NODE)
+                continue;
 
-    xmlAttr* attr = node->properties;
-    while (attr) {
-        if (attr->name && strcmp((const char*)attr->name, "type")==0) {
-            if (attr->children && attr->children->content)
-                prop.sig = (const char*)attr->children->content;
-        }
-        if (attr->name && strcmp((const char*)attr->name, "access")==0) {
-            if (attr->children && attr->children->content)
-                prop.access = (const char*)attr->children->content;
-        }
-        attr = attr->next;
-    }
-}
+            string type = (const char*)node->name;
+            string name = "";
+            string signature = "";
 
-
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void parse_iface (xmlNode* root, iface_t& iface)
-{
-    for (xmlNode* node=root; node; node=node->next) {
-        string type;
-        string name;
-        if (node->type != XML_ELEMENT_NODE)
-            continue;
-        get_type_name (node, type, name);
-
-        if (type == "method") {
-            method_t method;
-            method.name = name;
-            parse_method (node->children, method);
-            iface.methods.emplace_back (method);
-        }
-        else if (type == "signal") {
-            method_t signal;
-            signal.name = name;
-            parse_signal (node->children, signal);
-            iface.signals.emplace_back (signal);
-        }
-        else if (type == "property") {
-            property_t prop;
-            prop.name = name;
-            parse_prop (node, prop);
-            iface.props.emplace_back (prop);
+            if (type == "arg") {
+                xmlAttr* attr = node->properties;
+                while (attr) {
+                    if (attr->name && strcmp((const char*)attr->name, "name")==0) {
+                        if (attr->children && attr->children->content)
+                            name = (const char*)attr->children->content;
+                    }
+                    if (attr->name && strcmp((const char*)attr->name, "type")==0) {
+                        if (attr->children && attr->children->content)
+                            signature = (const char*)attr->children->content;
+                    }
+                    attr = attr->next;
+                }
+                if (!signature.empty())
+                    signal.in.emplace_back (name, signature);
+            }
         }
     }
-}
 
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-static void parse_node (xmlNode* root, object_t& obj)
-{
-    for (xmlNode* node=root; node; node=node->next) {
-        string type;
-        string name;
-        if (node->type != XML_ELEMENT_NODE)
-            continue;
-        get_type_name (node, type, name);
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void parse_prop (xmlNode* node, property_t& prop)
+    {
+        string type = (const char*)node->name;
 
-        if (type == "interface") {
-            iface_t iface;
-            iface.name = name;
-            parse_iface (node->children, iface);
-            obj.ifaces.push_back (iface);
-        }
-        else if (type == "node") {
-            obj.nodes.push_back (name);
+        xmlAttr* attr = node->properties;
+        while (attr) {
+            if (attr->name && strcmp((const char*)attr->name, "type")==0) {
+                if (attr->children && attr->children->content)
+                    prop.sig = (const char*)attr->children->content;
+            }
+            if (attr->name && strcmp((const char*)attr->name, "access")==0) {
+                if (attr->children && attr->children->content)
+                    prop.access = (const char*)attr->children->content;
+            }
+            attr = attr->next;
         }
     }
-}
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void parse_iface (xmlNode* root, iface_t& iface)
+    {
+        for (xmlNode* node=root; node; node=node->next) {
+            string type;
+            string name;
+            if (node->type != XML_ELEMENT_NODE)
+                continue;
+            get_type_name (node, type, name);
+
+            if (type == "method") {
+                method_t method;
+                method.name = name;
+                parse_method (node->children, method);
+                iface.methods.emplace_back (method);
+            }
+            else if (type == "signal") {
+                method_t signal;
+                signal.name = name;
+                parse_signal (node->children, signal);
+                iface.signals.emplace_back (signal);
+            }
+            else if (type == "property") {
+                property_t prop;
+                prop.name = name;
+                parse_prop (node, prop);
+                iface.props.emplace_back (prop);
+            }
+        }
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void parse_node (xmlNode* root, object_t& obj)
+    {
+        for (xmlNode* node=root; node; node=node->next) {
+            string type;
+            string name;
+            if (node->type != XML_ELEMENT_NODE)
+                continue;
+            get_type_name (node, type, name);
+
+            if (type == "interface") {
+                iface_t iface;
+                iface.name = name;
+                parse_iface (node->children, iface);
+                obj.ifaces.push_back (iface);
+            }
+            else if (type == "node") {
+                obj.nodes.push_back (name);
+            }
+        }
+    }
+
+
+} // Anonymous namespace
 
 #endif // NO_LIBXML2

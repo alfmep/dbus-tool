@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2023 Dan Arrhenius <dan@ultramarin.se>
+ * Copyright (C) 2021-2023,2026 Dan Arrhenius <dan@ultramarin.se>
  *
  * This file is part of dbus-tool.
  *
@@ -20,6 +20,7 @@
 #include <getopt.h>
 
 #include "appargs_t.hpp"
+#include "config.hpp"
 
 #ifdef __GLIBC__
 #define PROGRAM_NAME program_invocation_short_name
@@ -42,18 +43,19 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << endl;
     out << "Common options:" << endl;
     out << "  -y, --system                  Connect to the system bus instead of the session bus." << endl;
-    out << "  -b, --bus=ADDRESS             Connect to a specific bus address. Ignoring parameter --system." << endl;
-    out << "  -t, --timeout=MILLISECONDS    Set a specific timeout when waiting for message replies." << endl;
+    // out << "  -b, --bus=ADDRESS             Connect to a specific bus address. Ignoring parameter --system." << endl;
+    out << "  -t, --timeout=MILLISECONDS    Set a specific timeout when waiting for DBus message replies." << endl;
     out << "  -v, --version                 Print version and exit." << endl;
-    out << "  -h, --help                    Print this help message and exit." << endl;
+    out << "  -h, --help                    Print help message and exit." << endl;
+    // out << "                                If a command is given, print help on that specific command." << endl;
     out << endl;
     out << "Commands:" << endl;
     out << "  list" << endl;
     out << "      List the bus names(services) on this connection." << endl;
     out << "      Options:" << endl;
     out << "          -a, --all            Also include unique bus names." << endl;
-    out << "          -x, --activatable    Instead of already connected names," << endl;
-    out << "                               list all names that can be activated on the bus." << endl;
+    out << "          -x, --activatable    Instead of only already connected names," << endl;
+    out << "                               also list all names that can be activated on the bus." << endl;
     out << endl;
     out << "  call <service> <object_path> <interface> <method> [signature argument ...]" << endl;
     out << "      Call a specific method on an object in a DBus service." << endl;
@@ -62,10 +64,12 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "      then the argument value." << endl;
     out << "      If there is only a single argument, the signature can be" << endl;
     out << "      omitted if the argument is a boolean(true|false), string, or" << endl;
-    out << "      a signed integer." << endl;
+    out << "      a signed 32-bit integer." << endl;
     out << "      Options:" << endl;
-    out << "          -s, --signature    When printing the reply arguments, also" << endl;
-    out << "                             print the DBus signature of the arguments." << endl;
+    out << "          -j, --json         Print the DBus message reply in JSON format." << endl;
+    out << "          -s, --signature    If not JSON output, when printing the reply" << endl;
+    out << "                             arguments, also print the DBus signature of" << endl;
+    out << "                             the arguments." << endl;
     out << endl;
     out << "  introspect <service> [object_path]" << endl;
     out << "      Print introspect data for a specific object in a DBus service." << endl;
@@ -79,7 +83,9 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "      Get(and print) the property of an object in a DBus service." << endl;
     out << "      If argument 'property' is omitted, the names and values of all properties are printed to standard output." << endl;
     out << "      Options:" << endl;
-    out << "          -s, --signature    Print the DBus signature of the properties." << endl;
+    out << "          -j, --json         Print the DBus property value(s) in JSON format." << endl;
+    out << "          -s, --signature    If not JSON output, print the DBus signature of." << endl;
+    out << "                             the properties before the value." << endl;
     out << endl;
     out << "  set <service> <object_path> <interface> <property> [value_signature] <value>" << endl;
     out << "      Set the property of an object in a DBus service." << endl;
@@ -90,18 +96,19 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "      List all objects beloning to a specific service and object." << endl;
     out << "      If the object_path arguments is omitted, the root object \"/\" is used." << endl;
     out << endl;
-    out << "  listen <service> <object_path> <interface> [signal]" << endl;
-    out << "      Listen for a DBus signals from a DBus service." << endl;
-    out << "      <service> is the DBus service we want to receive signals from." << endl;
-    out << "      We will listen for signals from the specified object path using" << endl;
-    out << "      the specified interface." << endl;
-    out << "      If we specify a signal name, we will only listen for that signal." << endl;
-    out << "      If not, we will listen for all signals using that interface." << endl;
-    out << "      When a signal is received, it is printed to standard output." << endl;
+    out << "  listen [service] [object_path] [interface] [signal-name]" << endl;
+    out << "      Listen for DBus signals." << endl;
     out << "      Stop listening and exit the program by pressing Ctrl-C." << endl;
+    out << "      When a signal is received, it is printed to standard output." << endl;
+    out << "      Any argument may be and empty string or omitted, in which case" << endl;
+    out << "      it is treated as a wild card." << endl;
     out << "      Options:" << endl;
-    out << "          -s, --signature    When printing the signal arguments, also" << endl;
-    out << "                             print the DBus signature of the arguments." << endl;
+    out << "          -r, --recursive    If an object path is specified, listen for" << endl;
+    out << "                             signals on all of its sub-paths also." << endl;
+    out << "          -j, --json         Print the DBus signals in JSON format." << endl;
+    out << "          -s, --signature    If not JSON output, when printing the signal" << endl;
+    out << "                             arguments, also print the DBus signature of" << endl;
+    out << "                             the arguments." << endl;
     out << endl;
     out << "  start <service>" << endl;
     out << "      Try to launch the executable associated with a service name." << endl;
@@ -120,7 +127,10 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "          -q, --quiet    Suppress output, exit with 0 on success and 1 on failure." << endl;
     out << endl;
     out << "  monitor" << endl;
-    out << "      Monitor messages on the message bus and display them on standard output." << endl;
+    out << "      Monitor messages on the message bus and display them on standard output in JSON format." << endl;
+    out << "      Options:" << endl;
+    out << "          -e, --eavesdrop    Use an eavesdrop DBus match match rule instead" << endl;
+    out << "                             of trying to call method BecomeMonitor." << endl;
     out << endl;
     out << "  signal <service> <object_path> <interface> <signal> [signature argument ...]" << endl;
     out << "      Send a DBus signal." << endl;
@@ -138,20 +148,24 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 appargs_t::appargs_t (int argc, char* argv[])
-    : bus (DBUS_BUS_SESSION),
-      timeout (DBUS_TIMEOUT_USE_DEFAULT),
-      all (false),
-      activatable (false),
-      print_signature (false),
-      quiet (false),
+    : bus {DBUS_BUS_SESSION},
+      timeout {DBUS_TIMEOUT_USE_DEFAULT},
+      all {false},
+      activatable {false},
+      print_signature {false},
+      quiet {false},
 #ifdef NO_LIBXML2
-      raw (true)
+      raw {true},
 #else
-      raw (false)
+      raw {false},
 #endif
+      recursive {false},
+      eavesdrop {false},
+      json_output {false}
 {
     static struct option long_options[] = {
         { "system",      no_argument,       0, 'y'},
+        { "json",        no_argument,       0, 'j'},
         { "bus",         required_argument, 0, 'b'},
         { "timeout",     required_argument, 0, 't'},
         { "all",         no_argument,       0, 'a'},
@@ -161,15 +175,13 @@ appargs_t::appargs_t (int argc, char* argv[])
 #ifndef NO_LIBXML2
         { "raw",         no_argument,       0, 'r'},
 #endif
+        { "recursive",   no_argument,       0, 'r'},
+        { "eavesdrop",   no_argument,       0, 'e'},
         { "version",     no_argument,       0, 'v'},
         { "help",        no_argument,       0, 'h'},
         { 0, 0, 0, 0}
     };
-#ifndef NO_LIBXML2
-    static const char* arg_format = "yb:t:axsqrvh";
-#else
-    static const char* arg_format = "yb:t:axsqvh";
-#endif
+    static const char* arg_format = "yjb:t:axsqrevh";
     bool be_quiet = false;
 
     while (true) {
@@ -180,12 +192,15 @@ appargs_t::appargs_t (int argc, char* argv[])
         case 'y':
             bus = DBUS_BUS_SYSTEM;
             break;
+        case 'j':
+            json_output = true;
+            break;
         case 'a':
             all = true;
             break;
-        case 'b':
-            bus_address = std::string (optarg);
-            break;
+        // case 'b':
+        //     bus_address = std::string (optarg);
+        //     break;
         case 't':
             timeout = atoi (optarg);
             if (timeout <= 0) {
@@ -202,13 +217,15 @@ appargs_t::appargs_t (int argc, char* argv[])
         case 'q':
             be_quiet = true;
             break;
-#ifndef NO_LIBXML2
         case 'r':
             raw = true;
+            recursive = true;
             break;
-#endif
+        case 'e':
+            eavesdrop = true;
+            break;
         case 'v': // --version
-            std::cout << prog_name << ' ' << PACKAGE_VERSION << std::endl;
+            std::cout << DBUS_TOOL_PACKAGE_STRING << std::endl;
             exit (0);
             break;
         case 'h': // --help
@@ -289,13 +306,12 @@ appargs_t::appargs_t (int argc, char* argv[])
             opath = "/";
     }
     else if (cmd == "listen") {
-        if (optind > argc-3) {
-            cerr << "Error: too few arguments (--help for help)" << endl;
-            exit (1);
-        }
-        service = argv[optind++];
-        opath   = argv[optind++];
-        iface   = argv[optind++];
+        if (optind < argc)
+            service = argv[optind++];
+        if (optind < argc)
+            opath   = argv[optind++];
+        if (optind < argc)
+            iface   = argv[optind++];
         if (optind < argc)
             name = argv[optind++]; // A specific signal name
         else
