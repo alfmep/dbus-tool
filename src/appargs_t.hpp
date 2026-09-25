@@ -27,7 +27,6 @@
 
 struct appargs_t {
     appargs_t (int argc, char* argv[]);
-    void print_usage_and_exit (std::ostream& out, int exit_code);
 
     DBusBusType bus;
     //std::string bus_address;

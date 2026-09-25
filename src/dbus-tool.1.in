@@ -1,6 +1,6 @@
 .\" Manpage for dbus-tool
 .\" Contact @PACKAGE_BUGREPORT@ to correct errors or types.
-.TH dbus-tool 1 "" "@PACKAGE_STRING@" "User Commands"
+.TH dbus-tool 1 "" "@CMAKE_PROJECT_NAME@ @dbus-tool_VERSION_MAJOR@.@dbus-tool_VERSION_MINOR@.@dbus-tool_VERSION_PATCH@" "User Commands"
 
 
 .SH NAME
@@ -18,13 +18,10 @@ connected to the session/system DBus, calling methods, getting and setting prope
 on DBus signals.
 
 
-.SH OPTIONS
+.SH COMMON OPTIONS
 .TP
 .B -y, --system
 Connect to the system bus instead of the session bus.
-.TP
-.B -b, --bus=ADDRESS
-Connect to a specific bus address. Ignoring parameter -y, --system.
 .TP
 .B -t, --timeout=MILLISECONDS
 Set a specific timeout when waiting for message replies.
@@ -34,13 +31,14 @@ Print version and exit.
 .TP
 .B -h, --help
 Print help and exit.
-
+If a command is given, print help on that specific command.
 
 .SH COMMANDS
 
+
 .B list
 .RS 4
-List the bus names(services) on this connection.
+List the bus names(services) on the bus.
 
 .B OPTIONS
 .nf
@@ -49,26 +47,34 @@ List the bus names(services) on this connection.
 Also include unique bus names.
 .TP
 .B -x, --activatable
-Instead of already connected names, list all names that can be activated on the bus.
+Instead of already connected names, also list all names that can be activated on the bus.
 .RE
+
+
 
 .B call <service> <object_path> <interface> <method> [signature argument ...]
 .RS 4
 Call a specific method on an object in a DBus service.
 Any returned argument is printed to standard output.
 Arguments to the method begins with a DBus signature,
-then the argument value.
+followed by the argument value.
 If there is only a single argument, the signature can be
-omitted if the argument is a boolean(true|false), string, or
-a signed integer.
+omitted if the argument is a boolean(true|false), a string,
+or a signed integer.
 
 .B OPTIONS
 .nf
+.TP
+.B -j, --json
+Print the DBus message reply in JSON format.
 .TP
 .B -s, --signature
 When printing the reply arguments, also
 print the DBus signature of the arguments.
 .RE
+
+
+
 
 .B introspect <service> [object_path]
 .RS 4
@@ -78,72 +84,101 @@ If the object_path arguments is omitted, the root object "/" is used.
 .B OPTIONS
 .nf
 .TP
+.B -s, --skip
+Skip output of standard DBus interfaces.
+.TP
+.B -j, --json
+Print the introspect data in JSON format.
+.TP
 .B -r, --raw
 Don't parse the introspect data, print it "as is".
 .RE
 
 
+
 .B get <service> <object_path> <interface> [property]
 .RS 4
-Get(and print) the property of an object in a DBus service.
-If argument 'property' is omitted, the names and values of all properties are printed to standard output.
+Get the property of an object in a DBus service.
+If argument 'property' is omitted, the names and values
+of all properties are printed to standard output.
 
 .B OPTIONS
 .nf
 .TP
+.B -j, --json
+Print the DBus property value(s) in JSON format.
+.TP
 .B -s, --signature
-Also print the DBus signature of the properties.
+If not JSON output, print the DBus signature of
+each property before the value.
 .RE
 
 
 .B set <service> <object_path> <interface> <property> [value_signature] <value>
 .RS 4
 Set the property of an object in a DBus service.
-The signature of the value can omitted if the value is a boolean(true|false),
-string, or a signed integer.
+The signature of the value can omitted if the value
+is a boolean(true|false), string, or a signed integer.
 .RE
+
+
 
 .B objects <service> [object_path]
 .RS 4
-List all objects beloning to a specific service and object.
-If the object_path arguments is omitted, the root object "/" is used.
-.RE
-
-.B listen <service> <object_path> <interface> [signal]
-.RS 4
-Listen for a specific DBus signal.
-<service> is the DBus service we want to receive signals from.
-We will listen for signals from the specified object path using
-the specified interface.
-If we specify a signal name, we will only listen for that signal.
-If not, we will listen for all signals using that interface.
-When a signal is received, is is printed to standard output.
-Stop listening and exit the program by pressing Ctrl-C.
+List all objects beloning to a specific service at an object path.
+If the object_path arguments is omitted, the root object \"/\" is used.
 
 .B OPTIONS
 .nf
 .TP
-.B -s, --signature
-When printing the signal arguments, also
-print the DBus signature of the arguments.
+.B -a, --all
+For each object, list interface and property names.
 .RE
+
+
+
+
+.B listen [service] [object_path] [interface] [signal-name]
+.RS 4
+Listen for DBus signals.
+Stop listening and exit the program by pressing Ctrl-C.
+When a signal is received, it is printed to standard output.
+Any argument may be an empty string or omitted, in which case
+it is treated as a wild card.
+
+.B OPTIONS
+.nf
+.TP
+.B -r, --recursive
+If an object path is specified, listen for
+signals on all of its sub-paths also.
+.TP
+.B -j, --json
+Print the DBus signals in JSON format.
+.TP
+.B -s, --signature
+If not JSON output, when printing the signal
+arguments, also print the DBus signature of
+the arguments.
+.RE
+
 
 
 .B start <service>
 .RS 4
-Try to launch the executable associated with a service name.
+Launch the executable associated with a service name.
 
 .B OPTIONS
 .nf
 .TP
 .B -q, --quiet
-Suppress output, exit with 0 on success and 1 on failure.
+Suppress output and exit quietly with 0 on success and 1 on failure.
 .RE
 
 
 .B owner <service>
 .RS 4
-Print the unique bus name of the primary owner of the name.
+Print the unique bus name of the primary owner of the service name.
 .RE
 
 .B names <bus-name>
@@ -159,13 +194,20 @@ Ping a service on the bus and print the response time in milliseconds.
 .nf
 .TP
 .B -q, --quiet
-Suppress output, exit with 0 on success and 1 on failure.
+Suppress output and exit quietly with 0 on success and 1 on failure.
 .RE
 
 
 .B monitor
 .RS 4
-Monitor messages on the message bus and display them on standard output.
+Monitor messages on the message bus and display them on standard output in JSON format.
+
+.B OPTIONS
+.nf
+.TP
+.B -e, --eavesdrop
+Use an eavesdrop DBus match match rule instead
+of trying to call method BecomeMonitor.
 .RE
 
 
@@ -175,9 +217,8 @@ Send a DBus signal.
 This command will connect to the DBus and acquire the specified service name.
 Then it will send a signal with the specified object path and interface.
 Arguments to the signals begins with a DBus signature, then the argument value.
-If there is only a single argument, the signature can be
-omitted if the argument is a boolean(true|false), string, or
-a signed integer.
+If there is only a single argument, the signature can be omitted if the argument
+is a boolean(true|false), a string, or a signed integer.
 .RE
 
 
@@ -200,4 +241,4 @@ Turn power off on the first bluetooth device in the system:
 .EE
 
 .SH AUTHOR
-Dan Arrhenius (@PACKAGE_BUGREPORT@)
+@PACKAGE_AUTHOR@ (@PACKAGE_BUGREPORT@)

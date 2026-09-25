@@ -16,6 +16,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+#include <functional>
+#include <map>
 #include <unistd.h>
 #include <getopt.h>
 
@@ -31,119 +33,311 @@
 
 using namespace std;
 
-static constexpr const char* prog_name = "dbus-tool";
+namespace {
+    static constexpr const char* prog_name = "dbus-tool";
+
+    using help_command_t = std::function<void()>;
+
+    void print_help ();
+    void print_help_list ();
+    void print_help_call ();
+    void print_help_introspect ();
+    void print_help_get ();
+    void print_help_set ();
+    void print_help_objects ();
+    void print_help_listen ();
+    void print_help_start ();
+    void print_help_owner ();
+    void print_help_names ();
+    void print_help_ping ();
+    void print_help_monitor ();
+    void print_help_signal ();
+
+    std::map<std::string, help_command_t> help_commands = {
+        {"list", print_help_list},
+        {"call", print_help_call},
+        {"introspect", print_help_introspect},
+        {"get", print_help_get},
+        {"set", print_help_set},
+        {"objects", print_help_objects},
+        {"listen", print_help_listen},
+        {"start", print_help_start},
+        {"owner", print_help_owner},
+        {"names", print_help_names},
+        {"ping", print_help_ping},
+        {"monitor", print_help_monitor},
+        {"signal", print_help_signal},
+    };
 
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
-{
-    out << endl;
-    out << "Usage: " << PROGRAM_NAME << " [OPTIONS] <command> [command argument ...]" << endl;
-    out << endl;
-    out << "Common options:" << endl;
-    out << "  -y, --system                  Connect to the system bus instead of the session bus." << endl;
-    // out << "  -b, --bus=ADDRESS             Connect to a specific bus address. Ignoring parameter --system." << endl;
-    out << "  -t, --timeout=MILLISECONDS    Set a specific timeout when waiting for DBus message replies." << endl;
-    out << "  -v, --version                 Print version and exit." << endl;
-    out << "  -h, --help                    Print help message and exit." << endl;
-    // out << "                                If a command is given, print help on that specific command." << endl;
-    out << endl;
-    out << "Commands:" << endl;
-    out << "  list" << endl;
-    out << "      List the bus names(services) on this connection." << endl;
-    out << "      Options:" << endl;
-    out << "          -a, --all            Also include unique bus names." << endl;
-    out << "          -x, --activatable    Instead of only already connected names," << endl;
-    out << "                               also list all names that can be activated on the bus." << endl;
-    out << endl;
-    out << "  call <service> <object_path> <interface> <method> [signature argument ...]" << endl;
-    out << "      Call a specific method on an object in a DBus service." << endl;
-    out << "      Any returned argument is printed to standard output." << endl;
-    out << "      Arguments to the method begins with a DBus signature," << endl;
-    out << "      then the argument value." << endl;
-    out << "      If there is only a single argument, the signature can be" << endl;
-    out << "      omitted if the argument is a boolean(true|false), string, or" << endl;
-    out << "      a signed 32-bit integer." << endl;
-    out << "      Options:" << endl;
-    out << "          -j, --json         Print the DBus message reply in JSON format." << endl;
-    out << "          -s, --signature    If not JSON output, when printing the reply" << endl;
-    out << "                             arguments, also print the DBus signature of" << endl;
-    out << "                             the arguments." << endl;
-    out << endl;
-    out << "  introspect <service> [object_path]" << endl;
-    out << "      Print introspect data for a specific object in a DBus service." << endl;
-    out << "      If the object_path arguments is omitted, the root object \"/\" is used." << endl;
-    out << "      Options:" << endl;
-    out << "          -s, --skip   Skip output of standard DBus interfaces." << endl;
-    out << "          -j, --json   Print the introspect data in JSON format." << endl;
-    out << "          -r, --raw    Don't parse the introspect data, print it \"as is\"." << endl;
-    out << "                       This parameter invalidates parameters -s and -j." << endl;
-    out << endl;
-    out << "  get <service> <object_path> <interface> [property]" << endl;
-    out << "      Get(and print) the property of an object in a DBus service." << endl;
-    out << "      If argument 'property' is omitted, the names and values of all properties are printed to standard output." << endl;
-    out << "      Options:" << endl;
-    out << "          -j, --json         Print the DBus property value(s) in JSON format." << endl;
-    out << "          -s, --signature    If not JSON output, print the DBus signature of." << endl;
-    out << "                             the properties before the value." << endl;
-    out << endl;
-    out << "  set <service> <object_path> <interface> <property> [value_signature] <value>" << endl;
-    out << "      Set the property of an object in a DBus service." << endl;
-    out << "      The signature of the value can omitted if the value is a boolean(true|false)," << endl;
-    out << "      string, or a signed integer." << endl;
-    out << endl;
-    out << "  objects <service> [object_path]" << endl;
-    out << "      List all objects beloning to a specific service and object." << endl;
-    out << "      If the object_path arguments is omitted, the root object \"/\" is used." << endl;
-    out << endl;
-    out << "  listen [service] [object_path] [interface] [signal-name]" << endl;
-    out << "      Listen for DBus signals." << endl;
-    out << "      Stop listening and exit the program by pressing Ctrl-C." << endl;
-    out << "      When a signal is received, it is printed to standard output." << endl;
-    out << "      Any argument may be and empty string or omitted, in which case" << endl;
-    out << "      it is treated as a wild card." << endl;
-    out << "      Options:" << endl;
-    out << "          -r, --recursive    If an object path is specified, listen for" << endl;
-    out << "                             signals on all of its sub-paths also." << endl;
-    out << "          -j, --json         Print the DBus signals in JSON format." << endl;
-    out << "          -s, --signature    If not JSON output, when printing the signal" << endl;
-    out << "                             arguments, also print the DBus signature of" << endl;
-    out << "                             the arguments." << endl;
-    out << endl;
-    out << "  start <service>" << endl;
-    out << "      Try to launch the executable associated with a service name." << endl;
-    out << "      Options:" << endl;
-    out << "          -q, --quiet    Suppress output, exit with 0 on success and 1 on failure." << endl;
-    out << endl;
-    out << "  owner <service>" << endl;
-    out << "      Print the unique bus name of the primary owner of the service name." << endl;
-    out << endl;
-    out << "  names <bus-name>" << endl;
-    out << "      Print the names acquired by the bus connection." << endl;
-    out << endl;
-    out << "  ping <service>" << endl;
-    out << "      Ping a service on the bus and print the response time in milliseconds." << endl;
-    out << "      Options:" << endl;
-    out << "          -q, --quiet    Suppress output, exit with 0 on success and 1 on failure." << endl;
-    out << endl;
-    out << "  monitor" << endl;
-    out << "      Monitor messages on the message bus and display them on standard output in JSON format." << endl;
-    out << "      Options:" << endl;
-    out << "          -e, --eavesdrop    Use an eavesdrop DBus match match rule instead" << endl;
-    out << "                             of trying to call method BecomeMonitor." << endl;
-    out << endl;
-    out << "  signal <service> <object_path> <interface> <signal> [signature argument ...]" << endl;
-    out << "      Send a DBus signal." << endl;
-    out << "      This command will connect to the DBus and acquire the specified service name." << endl;
-    out << "      Then it will send a signal with the specified object path and interface." << endl;
-    out << "      Arguments to the signals begins with a DBus signature," << endl;
-    out << "      then the argument value." << endl;
-    out << "      If there is only a single argument, the signature can be" << endl;
-    out << "      omitted if the argument is a boolean(true|false), string, or" << endl;
-    out << "      a signed integer." << endl;
-    exit (exit_code);
-}
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_common_options ()
+    {
+        cout << "  -y, --system       Connect to the system bus instead of the session bus." << endl;
+        cout << "  -t, --timeout=MS   Set a specific timeout in milliseconds for DBus replies." << endl;
+        cout << "  -v, --version      Print version and exit." << endl;
+        cout << "  -h, --help         Print help message and exit." << endl;
+        cout << "                     If a command is given, print help on that specific command." << endl;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " [OPTIONS] <command> [command argument ...]" << endl;
+        cout << endl;
+        cout << "Common options:" << endl;
+        print_common_options ();
+        cout << "Commands:" << endl;
+        cout << "  list        List the bus names(services) on the bus." << endl;
+        cout << "  call        Call a specific method on an object in a DBus service." << endl;
+        cout << "  introspect  Print introspect data for a specific object in a DBus service." << endl;
+        cout << "  get         Get the property of an object in a DBus service." << endl;
+        cout << "  set         Set the property of an object in a DBus service." << endl;
+        cout << "  objects     List all objects beloning to a specific service." << endl;
+        cout << "  listen      Listen for DBus signals." << endl;
+        cout << "  start       Launch the executable associated with a service name." << endl;
+        cout << "  owner       Print the unique bus name of the primary owner of a service name." << endl;
+        cout << "  names       Print the names acquired by a bus connection." << endl;
+        cout << "  ping        Ping a service." << endl;
+        cout << "  monitor     Monitor messages on the message bus." << endl;
+        cout << "  signal      Send a DBus signal." << endl;
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_list ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " list [OPTIONS]" << endl;
+        cout << endl;
+        cout << "  List the bus names(services) on the bus." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -a, --all          Also include unique bus names." << endl;
+        cout << "  -x, --activatable  Instead of only already connected bus names," << endl;
+        cout << "                     also list all names that can be activated on the bus." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_call ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " call [OPTIONS] <service> <object_path> <interface> <method> [signature argument ...]" << endl;
+        cout << endl;
+        cout << "  Call a specific method on an object in a DBus service." << endl;
+        cout << "  Any returned argument is printed to standard output." << endl;
+        cout << "  Arguments to the method begins with a DBus signature," << endl;
+        cout << "  followed by the argument value. If there is only a " << endl;
+        cout << "  single argument, the signature can be omitted if the" << endl;
+        cout << "  argument is a boolean(true|false), a string, or a" << endl;
+        cout << "  signed 32-bit integer." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -j, --json         Print the DBus message reply in JSON format." << endl;
+        cout << "  -s, --signature    If not JSON output, when printing the reply" << endl;
+        cout << "                     arguments, also print the DBus signature of" << endl;
+        cout << "                     the arguments." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_introspect ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " introspect [OPTIONS] <service> [object_path]" << endl;
+        cout << endl;
+        cout << "  Print introspect data for a specific object in a DBus service." << endl;
+        cout << "  If the object_path arguments is omitted, the root object \"/\" is used." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -s, --skip         Skip output of standard DBus interfaces." << endl;
+        cout << "  -j, --json         Print the introspect data in JSON format." << endl;
+        cout << "  -r, --raw          Don't parse the introspect data, print it \"as is\"." << endl;
+        cout << "                     This parameter invalidates parameters -s and -j." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_get ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " get [OPTIONS] <service> <object_path> <interface> [property]" << endl;
+        cout << endl;
+        cout << "  Get the property of an object in a DBus service." << endl;
+        cout << "  If argument 'property' is omitted, the names and values" << endl;
+        cout << "  of all properties are printed to standard output." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -j, --json         Print the DBus property value(s) in JSON format." << endl;
+        cout << "  -s, --signature    If not JSON output, print the DBus signature of" << endl;
+        cout << "                     each property before the value." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_set ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " set [OPTIONS] <service> <object_path> <interface> <property> [value_signature] <value>" << endl;
+        cout << endl;
+        cout << "  Set the property of an object in a DBus service." << endl;
+        cout << "  The signature of the value can omitted if the value" << endl;
+        cout << "  is a boolean(true|false), string, or a signed integer." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_objects ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " objects [OPTIONS] <service> [object_path]" << endl;
+        cout << endl;
+        cout << "  List all objects beloning to a specific service at an object path." << endl;
+        cout << "  If the object_path arguments is omitted, the root object \"/\" is used." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -a, --all          For each object, list interface and property names." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_listen ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " listen [OPTIONS] [service] [object_path] [interface] [signal-name]" << endl;
+        cout << endl;
+        cout << "  Listen for DBus signals." << endl;
+        cout << "  Stop listening and exit the program by pressing Ctrl-C." << endl;
+        cout << "  When a signal is received, it is printed to standard output." << endl;
+        cout << "  Any argument may be an empty string or omitted, in which case" << endl;
+        cout << "  it is treated as a wild card." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -r, --recursive    If an object path is specified, listen for" << endl;
+        cout << "                     signals on all of its sub-paths also." << endl;
+        cout << "  -j, --json         Print the DBus signals in JSON format." << endl;
+        cout << "  -s, --signature    If not JSON output, when printing the signal" << endl;
+        cout << "                     arguments, also print the DBus signature of" << endl;
+        cout << "                     the arguments." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_start ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " start [OPTIONS] <service>" << endl;
+        cout << endl;
+        cout << "  Launch the executable associated with a service name." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -q, --quiet        Suppress output and exit quietly with 0 on success and 1 on failure." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_owner ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " owner [OPTIONS] <service>" << endl;
+        cout << endl;
+        cout << "  Print the unique bus name of the primary owner of the service name." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_names ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " names [OPTIONS] <bus-name>" << endl;
+        cout << endl;
+        cout << "  Print the names acquired by the bus connection." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_ping ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " ping [OPTIONS] <service>" << endl;
+        cout << endl;
+        cout << "  Ping a service on the bus and print the response time in milliseconds." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -q, --quiet        Suppress output and exit quietly with 0 on success and 1 on failure." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_monitor ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " monitor [OPTIONS]" << endl;
+        cout << endl;
+        cout << "  Monitor messages on the message bus and display them on standard output in JSON format." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        cout << "  -e, --eavesdrop    Use an eavesdrop DBus match match rule instead" << endl;
+        cout << "                     of trying to call method BecomeMonitor." << endl;
+        print_common_options ();
+    }
+
+
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    void print_help_signal ()
+    {
+        cout << endl;
+        cout << "Usage: " << PROGRAM_NAME << " signal [OPTIONS] <service> <object_path> <interface> <signal> [signature argument ...]" << endl;
+        cout << endl;
+        cout << "  Send a DBus signal." << endl;
+        cout << "  This command will connect to the DBus and acquire the specified service name." << endl;
+        cout << "  Then it will send a signal with the specified object path and interface." << endl;
+        cout << "  Arguments to the signals begins with a DBus signature, then the argument value." << endl;
+        cout << "  If there is only a single argument, the signature can be omitted if the argument" << endl;
+        cout << "  is a boolean(true|false), string, or a signed integer." << endl;
+        cout << endl;
+        cout << "Options:" << endl;
+        print_common_options ();
+    }
+
+
+} // Anonymous namespace
+
 
 
 //------------------------------------------------------------------------------
@@ -179,6 +373,7 @@ appargs_t::appargs_t (int argc, char* argv[])
     };
     static const char* arg_format = "yjb:t:axsqrevh";
     bool be_quiet = false;
+    bool help_needed = false;
 
     while (true) {
         int c = getopt_long (argc, argv, arg_format, long_options, nullptr);
@@ -222,18 +417,33 @@ appargs_t::appargs_t (int argc, char* argv[])
             eavesdrop = true;
             break;
         case 'v': // --version
-            std::cout << DBUS_TOOL_PACKAGE_STRING << std::endl;
+            cout << DBUS_TOOL_PACKAGE_STRING << std::endl;
             exit (0);
             break;
         case 'h': // --help
-            print_usage_and_exit (cout, 0);
+            help_needed = true;
             break;
         default:
-            cerr << "Invalid option" << endl;
-            print_usage_and_exit (cerr, 1);
+            cerr << "Invalid option (--help for help)" << endl;
             break;
         }
     }
+    if (help_needed) {
+        if (optind >= argc) {
+            print_help ();
+        }else{
+            cmd = argv[optind++];
+            auto help_cmd = help_commands.find (cmd);
+            if (help_cmd == help_commands.end()) {
+                cerr << "Error: Unknown command (-h for help)." << endl;
+                exit (1);
+            }
+            help_cmd->second ();
+        }
+        cout << endl;
+        exit (0);
+    }
+
     if (optind >= argc) {
         cerr << "Error: missing command (--help for help)" << endl;
         exit (1);

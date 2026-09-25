@@ -26,6 +26,9 @@ project (dbus-tool
     DESCRIPTION "dbus-tool is a multipurpose command line utility for the DBus interprocess communication system."
 )
 
+set (PACKAGE_AUTHOR "Dan")
+set (PACKAGE_BUGREPORT "dan@ultramarin.se")
+
 # C++ standard
 #
 set (CMAKE_CXX_STANDARD 20)
@@ -62,6 +65,10 @@ pkg_check_modules(libxml-2.0 REQUIRED IMPORTED_TARGET libxml-2.0)
 configure_file (
     ${CMAKE_CURRENT_SOURCE_DIR}/src/config.hpp.in
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.hpp
+)
+configure_file (
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dbus-tool.1.in
+    ${CMAKE_CURRENT_BINARY_DIR}/src/dbus-tool.1
 )
 
 
