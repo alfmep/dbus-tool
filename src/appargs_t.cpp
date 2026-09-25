@@ -74,10 +74,11 @@ void appargs_t::print_usage_and_exit (ostream& out, int exit_code)
     out << "  introspect <service> [object_path]" << endl;
     out << "      Print introspect data for a specific object in a DBus service." << endl;
     out << "      If the object_path arguments is omitted, the root object \"/\" is used." << endl;
-#ifndef NO_LIBXML2
     out << "      Options:" << endl;
+    out << "          -s, --skip   Skip output of standard DBus interfaces." << endl;
+    out << "          -j, --json   Print the introspect data in JSON format." << endl;
     out << "          -r, --raw    Don't parse the introspect data, print it \"as is\"." << endl;
-#endif
+    out << "                       This parameter invalidates parameters -s and -j." << endl;
     out << endl;
     out << "  get <service> <object_path> <interface> [property]" << endl;
     out << "      Get(and print) the property of an object in a DBus service." << endl;
@@ -154,11 +155,7 @@ appargs_t::appargs_t (int argc, char* argv[])
       activatable {false},
       print_signature {false},
       quiet {false},
-#ifdef NO_LIBXML2
-      raw {true},
-#else
       raw {false},
-#endif
       recursive {false},
       eavesdrop {false},
       json_output {false}
@@ -171,10 +168,9 @@ appargs_t::appargs_t (int argc, char* argv[])
         { "all",         no_argument,       0, 'a'},
         { "activatable", no_argument,       0, 'x'},
         { "signature",   no_argument,       0, 's'},
+        { "skip",        no_argument,       0, 's'},
         { "quiet",       no_argument,       0, 'q'},
-#ifndef NO_LIBXML2
         { "raw",         no_argument,       0, 'r'},
-#endif
         { "recursive",   no_argument,       0, 'r'},
         { "eavesdrop",   no_argument,       0, 'e'},
         { "version",     no_argument,       0, 'v'},
@@ -213,6 +209,7 @@ appargs_t::appargs_t (int argc, char* argv[])
             break;
         case 's':
             print_signature = true;
+            skip = true;
             break;
         case 'q':
             be_quiet = true;

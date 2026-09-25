@@ -54,9 +54,7 @@ if (ultrabus_FOUND)
 endif()
 
 find_package(PkgConfig)
-if (PkgConfig_FOUND)
-    pkg_check_modules(libxml-2.0 IMPORTED_TARGET libxml-2.0)
-endif()
+pkg_check_modules(libxml-2.0 REQUIRED IMPORTED_TARGET libxml-2.0)
 
 
 # Configuration file
@@ -73,22 +71,14 @@ add_executable (dbus-tool)
 target_sources (dbus-tool PRIVATE
     src/appargs_t.cpp
     src/dbus_arg_parser.cpp
-    src/print_introspect.cpp
+    src/introspect_parser.cpp
     src/main.cpp
 )
-if (libxml-2.0_FOUND)
-    target_link_libraries (dbus-tool
-        PRIVATE
-        ultrabus::ultrabus
-        PkgConfig::libxml-2.0
-    )
-else()
-    link_libraries (dbus-tool
-        PRIVATE
-        ultrabus::ultrabus
-    )
-    add_compile_options ("-DNO_LIBXML2")
-endif()
+target_link_libraries (dbus-tool
+    PRIVATE
+    ultrabus::ultrabus
+    PkgConfig::libxml-2.0
+)
 target_include_directories (dbus-tool
     PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>

@@ -44,6 +44,7 @@ struct appargs_t {
     bool print_signature;
     bool quiet;
     bool raw;
+    bool skip;
     bool recursive;
     bool eavesdrop;
     bool json_output;

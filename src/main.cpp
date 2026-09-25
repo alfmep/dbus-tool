@@ -30,7 +30,7 @@
 
 #include "appargs_t.hpp"
 #include "dbus_arg_parser.hpp"
-#include "print_introspect.hpp"
+#include "introspect_parser.hpp"
 
 namespace ubus = ultrabus;
 using namespace std;
@@ -186,18 +186,17 @@ namespace {
     bool introspect (ubus::connection& conn, const appargs_t& opt)
     {
         ubus::org_freedesktop_DBus_Introspectable is (conn);
-        auto reply = is.introspect (opt.service, opt.opath, opt.timeout);
-        if (reply.err()) {
-            cerr << "Error: " << reply.what() << endl;
+        auto xml_doc = is.introspect (opt.service, opt.opath, opt.timeout);
+        if (xml_doc.err()) {
+            cerr << "Error: " << xml_doc.what() << endl;
         }
         else if (opt.raw) {
-            cout << reply.get() << endl;
+            cout << xml_doc.get() << endl;
         }else{
-            cout << "Service: " << opt.service << endl;
-            cout << "Object path: " << opt.opath << endl;
-            print_introspect (opt.opath, reply);
+            introspect_parser ip (opt.skip);
+            ip.print (ip.parse_xml(xml_doc), opt.service, opt.opath, cout, opt.json_output);
         }
-        return reply.err() == false;
+        return xml_doc.err() == 0;
     }
 
 
