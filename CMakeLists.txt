@@ -96,6 +96,10 @@ target_include_directories (dbus-tool
 # Installation
 #
 install (TARGETS dbus-tool)
+install (
+    FILES "${PROJECT_BINARY_DIR}/src/dbus-tool.1"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1"
+)
 
 #
 # Uninstall target
