@@ -1,0 +1,141 @@
+# bash completion for dbus-tool                           -*- shell-script -*-
+#
+# Install system-wide:
+#   sudo install -m 0644 dbus-tool.bash-completion /usr/share/bash-completion/completions/dbus-tool
+# Or per-user:
+#   mkdir -p ~/.local/share/bash-completion/completions
+#   install -m 0644 dbus-tool.bash-completion ~/.local/share/bash-completion/completions/dbus-tool
+#
+# Then either start a new shell, or: source /etc/bash_completion.d/dbus-tool
+
+_dbus_tool_commands="list call introspect get set objects listen start owner names ping monitor signal"
+
+_dbus_tool_common_opts="-y --system -t --timeout= -v --version -h --help"
+
+# Options accepted by each sub-command (in addition to the common options above)
+_dbus_tool_cmd_opts() {
+    case "$1" in
+        list)       echo "-a --all -x --activatable" ;;
+        call)       echo "-j --json -s --signature" ;;
+        introspect) echo "-s --skip -j --json -r --raw" ;;
+        get)        echo "-j --json -s --signature" ;;
+        set)        echo "" ;;
+        objects)    echo "-a --all" ;;
+        listen)     echo "-r --recursive -j --json -s --signature" ;;
+        start)      echo "-q --quiet" ;;
+        owner)      echo "" ;;
+        names)      echo "" ;;
+        ping)       echo "-q --quiet" ;;
+        monitor)    echo "-e --eavesdrop" ;;
+        signal)     echo "" ;;
+        *)          echo "" ;;
+    esac
+}
+
+# Whether "-y/--system" was already given among the words typed so far,
+# used to query the correct bus when listing service names dynamically.
+_dbus_tool_bus_flag() {
+    local i
+    for ((i = 1; i < ${#COMP_WORDS[@]}; i++)); do
+        case "${COMP_WORDS[i]}" in
+            -y|--system) echo "--system"; return ;;
+        esac
+    done
+}
+
+# Complete with the list of bus names currently on the (session/system) bus.
+_dbus_tool_services() {
+    local bus_flag
+    bus_flag=$(_dbus_tool_bus_flag)
+    # Ignore errors/timeouts silently, e.g. no bus available.
+    dbus-tool $bus_flag list -a 2>/dev/null
+}
+
+# Find the sub-command (first non-option argument) already typed, if any.
+_dbus_tool_find_command() {
+    local i word
+    for ((i = 1; i < COMP_CWORD; i++)); do
+        word="${COMP_WORDS[i]}"
+        case "$word" in
+            -t|--timeout)
+                ((i++))
+                continue
+                ;;
+            -*)
+                continue
+                ;;
+            *)
+                echo "$word"
+                return
+                ;;
+        esac
+    done
+}
+
+_dbus_tool() {
+    local cur prev words cword split
+    if type -t _init_completion >/dev/null 2>&1; then
+        _init_completion -s || return
+    else
+        COMPREPLY=()
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD - 1]}"
+    fi
+
+    local command
+    command=$(_dbus_tool_find_command)
+
+    # Argument to -t/--timeout takes a number, nothing to complete usefully.
+    case "$prev" in
+        -t|--timeout)
+            COMPREPLY=()
+            return
+            ;;
+    esac
+
+    if [[ -z $command ]]; then
+        # No command typed yet: offer common options and the command list.
+        if [[ $cur == -* ]]; then
+            COMPREPLY=($(compgen -W "$_dbus_tool_common_opts" -- "$cur"))
+        else
+            COMPREPLY=($(compgen -W "$_dbus_tool_commands" -- "$cur"))
+        fi
+        return
+    fi
+
+    if [[ $cur == -* ]]; then
+        COMPREPLY=($(compgen -W "$_dbus_tool_common_opts $(_dbus_tool_cmd_opts "$command")" -- "$cur"))
+        return
+    fi
+
+    # Position of the current word among the non-option arguments that
+    # follow the command name (0 = command itself, 1 = first argument, ...).
+    local -i arg_pos=0
+    local i word
+    for ((i = 1; i < COMP_CWORD; i++)); do
+        word="${COMP_WORDS[i]}"
+        case "$word" in
+            -t|--timeout)
+                ((i++))
+                ;;
+            -*)
+                ;;
+            *)
+                ((arg_pos++))
+                ;;
+        esac
+    done
+
+    case "$command" in
+        call|get|set|objects|introspect|listen|signal|start|owner|names|ping)
+            if [[ $arg_pos -eq 1 ]]; then
+                COMPREPLY=($(compgen -W "$(_dbus_tool_services)" -- "$cur"))
+                return
+            fi
+            ;;
+    esac
+
+    COMPREPLY=()
+}
+
+complete -F _dbus_tool dbus-tool

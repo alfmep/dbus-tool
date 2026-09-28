@@ -97,8 +97,13 @@ target_include_directories (dbus-tool
 #
 install (TARGETS dbus-tool)
 install (
-    FILES "${PROJECT_BINARY_DIR}/src/dbus-tool.1"
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/src/dbus-tool.1"
     DESTINATION "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_MANDIR}/man1"
+)
+install (
+    FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/dbus-tool.bash-completion"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/bash-completion/completions"
+    RENAME "dbus-tool"
 )
 
 #
