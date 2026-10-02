@@ -88,14 +88,19 @@ namespace {
     //--------------------------------------------------------------------------
     bool list_services (ubus::connection& conn, appargs_t& opt)
     {
-        auto names = opt.activatable ? conn.list_activatable_names(opt.timeout) : conn.list_names(opt.timeout);
+        auto names = opt.list.activatable ? conn.list_activatable_names(opt.timeout) : conn.list_names(opt.timeout);
         if (names.err()) {
             cerr << names.what() << endl;
             return false;
         }
         for (auto& name : names.get()) {
-            if (opt.all || name[0]!=':')
-                cout << name << endl;
+            if (opt.list.unique) {
+                if (name[0] == ':')
+                    cout << name << endl;
+            }else{
+                if (opt.list.all || name[0]!=':')
+                    cout << name << endl;
+            }
         }
         return true;
     }
@@ -162,7 +167,7 @@ namespace {
         }
 
         auto reply = conn.send_and_wait (msg, opt.timeout);
-        if (opt.json_output) {
+        if (opt.call.json_output) {
             cout << reply.to_json() << endl;
         }else{
             if (reply.is_error()) {
@@ -170,7 +175,7 @@ namespace {
             }else{
                 auto args = reply.arguments ();
                 for (auto& arg : args) {
-                    if (opt.print_signature)
+                    if (opt.call.print_signature)
                         cout << arg->signature() << ' ' << arg->to_string() << endl;
                     else
                         cout << arg->to_string() << endl;
@@ -190,11 +195,11 @@ namespace {
         if (xml_doc.err()) {
             cerr << "Error: " << xml_doc.what() << endl;
         }
-        else if (opt.raw) {
+        else if (opt.introspect.raw) {
             cout << xml_doc.get() << endl;
         }else{
-            introspect_parser ip (opt.skip);
-            ip.print (ip.parse_xml(xml_doc), opt.service, opt.opath, cout, opt.json_output);
+            introspect_parser ip (opt.introspect.skip);
+            ip.print (ip.parse_xml(xml_doc), opt.service, opt.opath, cout, opt.introspect.json_output);
         }
         return xml_doc.err() == 0;
     }
@@ -216,9 +221,9 @@ namespace {
                 return false;
             }
             ubus::dbus_type& value = result.get().get ();
-            if (opt.json_output) {
+            if (opt.get.json_output) {
                 cout << value.to_json() << endl;
-            }else if (opt.print_signature) {
+            }else if (opt.get.print_signature) {
                 cout << value.signature() << ' ' << value.to_string() << endl;
             }else{
                 cout << value.to_string() << endl;
@@ -235,7 +240,7 @@ namespace {
 
             const auto& props = retval.get ();
 
-            if (opt.json_output) {
+            if (opt.get.json_output) {
                 cout << props.to_json() << endl;
                 return true;
             }
@@ -247,7 +252,7 @@ namespace {
                 size_t len = key.get().size ();
                 if (len > max_width)
                     max_width = len;
-                if (opt.print_signature) {
+                if (opt.get.print_signature) {
                     const ubus::dbus_type& value = prop.second.is_variant() ?
                         prop.second.cast<ubus::dbus_variant>().get() :
                         prop.second;
@@ -261,7 +266,7 @@ namespace {
                 const ubus::dbus_type& value = prop.second.is_variant() ?
                     prop.second.cast<ubus::dbus_variant>().get() :
                     prop.second;
-                if (opt.print_signature) {
+                if (opt.get.print_signature) {
                     cout << setw(max_width) << key.get() << ' '
                          << setw(max_sig_width) << value.signature() << ": "
                          << value.to_string() << endl;
@@ -311,17 +316,62 @@ namespace {
             cerr << "Error: " << reply.what() << endl;
             return false;
         }
-        for (const auto& entry : reply.get()) {
-            cout << entry.first << endl;
-            if (!opt.all)
-                continue;
-            for (const auto& if_entry : entry.second) {
-                cout << "    " << if_entry.first << endl;
-                for (const auto& prop : if_entry.second) {
-                    cout << "        " << prop.first.cast<ubus::dbus_string>().get() << endl;
+        if (opt.objects.json_output) {
+            cout << '[';
+            bool first_opath = true;
+            for (const auto& entry : reply.get()) {
+                if (first_opath)
+                    first_opath = false;
+                else
+                    cout << ',';
+                cout << '{';
+                cout << R"("object_path":")" << entry.first << '"';
+
+                if (!opt.objects.all || entry.second.empty()) {
+                    cout << '}';
+                    continue;
                 }
+
+                cout << R"(,"interfaces":[)";
+                bool first_iface = true;
+                for (const auto& if_entry : entry.second) {
+                    if (first_iface)
+                        first_iface = false;
+                    else
+                        cout << ',';
+
+                    cout << '{';
+                    cout << R"("name":")" << if_entry.first << '"';
+                    if ( ! if_entry.second.empty()) {
+                        cout << R"(,"property_names":[)";
+                        bool first_prop = true;
+                        for (const auto& prop : if_entry.second) {
+                            if (first_prop)
+                                first_prop = false;
+                            else
+                                cout << ',';
+                            cout << '"' << prop.first.cast<ubus::dbus_string>().get() << '"';
+                        }
+                        cout << ']';
+                    }
+                    cout << '}';
+                }
+                cout << "]}";
             }
-            cout << endl;
+            cout << ']';
+        }else{
+            for (const auto& entry : reply.get()) {
+                cout << entry.first << endl;
+                if (!opt.objects.all)
+                    continue;
+                for (const auto& if_entry : entry.second) {
+                    cout << "    " << if_entry.first << endl;
+                    for (const auto& prop : if_entry.second) {
+                        cout << "        " << prop.first.cast<ubus::dbus_string>().get() << endl;
+                    }
+                }
+                cout << endl;
+            }
         }
         return true;
     }
@@ -341,7 +391,7 @@ namespace {
 
         ubus::callback_message_filter cmf (conn);
         cmf.set_signal_cb ([&opt, &conn](ubus::message& signal)->bool{
-            if (opt.json_output) {
+            if (opt.listen.json_output) {
                 cout << signal.to_json() << endl;
             }else{
                 cout << "Signal       " << signal.name() << endl;
@@ -352,7 +402,7 @@ namespace {
                 if (!args.empty()) {
                     cout << "Arguments: " << endl;
                     for (auto& arg : args) {
-                        if (opt.print_signature)
+                        if (opt.listen.print_signature)
                             cout << "    " << arg->signature() << ' ' << arg->to_string() << endl;
                         else
                             cout << "    " << arg->to_string() << endl;
@@ -369,7 +419,7 @@ namespace {
             rule.push_back ('\'');
         }
         if ( ! opt.opath.empty()) {
-            if (opt.recursive)
+            if (opt.listen.recursive)
                 rule.append (",path_namespace='");
             else
                 rule.append (",path='");
@@ -405,21 +455,21 @@ namespace {
     {
         auto result = conn.start_service_by_name (opt.service, opt.timeout);
         if (result.err()) {
-            if (!opt.quiet)
+            if (!opt.start.quiet)
                 cerr << result.what() << endl;
             return false;
         }
         switch (result.get()) {
         case DBUS_START_REPLY_SUCCESS:
-            if (!opt.quiet)
+            if (!opt.start.quiet)
                 cout << opt.service << " started" << endl;
             break;
         case DBUS_START_REPLY_ALREADY_RUNNING:
-            if (!opt.quiet)
+            if (!opt.start.quiet)
                 cout << opt.service << " already running" << endl;
             break;
         default:
-            if (!opt.quiet)
+            if (!opt.start.quiet)
                 cerr << "Error: Unknown return value: " << result.get() << endl;
             return false;
         }
@@ -476,11 +526,11 @@ namespace {
 
         auto result = peer.ping (opt.service, opt.timeout);
         if (result.err()) {
-            if (!opt.quiet)
+            if (!opt.ping.quiet)
                 cerr << "Error: " << result.what() << endl;
             return false;
         }
-        if (!opt.quiet)
+        if (!opt.ping.quiet)
             cout << ((float)result.get()/1000) << " ms" << endl;
         return true;
     }
@@ -504,7 +554,7 @@ namespace {
             return true;
         });
 
-        bool use_eavesdrop = opt.eavesdrop;
+        bool use_eavesdrop = opt.monitor.eavesdrop;
         if ( ! use_eavesdrop) {
             auto result = conn.become_monitor (std::list<std::string>(), opt.timeout);
             if (result.err()) {
@@ -532,12 +582,10 @@ namespace {
         if ( ! opt.service.empty()) {
             auto result = conn.request_name (opt.service, opt.timeout);
             if (result != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
-                if (!opt.quiet) {
-                    if (result.err())
-                        cerr << "Error: " << result.what() << endl;
-                    else
-                        cerr << "Error: Unable to request the service name." << endl;
-                }
+                if (result.err())
+                    cerr << "Error: " << result.what() << endl;
+                else
+                    cerr << "Error: Unable to request the service name." << endl;
                 return false;
             }
         }
@@ -616,7 +664,13 @@ int main (int argc, char* argv[])
         retval = cmd->second(conn, opt) ? 0 : 1;
     }
     catch (std::exception& e) {
-        if (!opt.quiet)
+        bool be_quiet = false;
+        if (opt.cmd=="start")
+            be_quiet = opt.start.quiet;
+        else if (opt.cmd=="ping")
+            be_quiet = opt.ping.quiet;
+
+        if ( ! be_quiet)
             cerr << "Error - exception caught: " << e.what() << endl;
         retval = 1;
     }

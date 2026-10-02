@@ -34,7 +34,6 @@
 using namespace std;
 
 namespace {
-    static constexpr const char* prog_name = "dbus-tool";
 
     using help_command_t = std::function<void()>;
 
@@ -87,7 +86,7 @@ namespace {
     void print_help ()
     {
         cout << endl;
-        cout << "Usage: " << PROGRAM_NAME << " [OPTIONS] <command> [command argument ...]" << endl;
+        cout << "Usage: " << PROGRAM_NAME << " [OPTIONS] <command> [argument ...]" << endl;
         cout << endl;
         cout << "Common options:" << endl;
         print_common_options ();
@@ -119,6 +118,7 @@ namespace {
         cout << endl;
         cout << "Options:" << endl;
         cout << "  -a, --all          Also include unique bus names." << endl;
+        cout << "  -u, --unique       Only list unique bus names." << endl;
         cout << "  -x, --activatable  Instead of only already connected bus names," << endl;
         cout << "                     also list all names that can be activated on the bus." << endl;
         print_common_options ();
@@ -211,10 +211,13 @@ namespace {
         cout << "Usage: " << PROGRAM_NAME << " objects [OPTIONS] <service> [object_path]" << endl;
         cout << endl;
         cout << "  List all objects beloning to a specific service at an object path." << endl;
-        cout << "  If the object_path arguments is omitted, the root object \"/\" is used." << endl;
+        cout << "  If the object_path argument is omitted, the root object \"/\" is used." << endl;
+        cout << "  Note that the object at the specified object path needs to implement" << endl;
+        cout << "  standard DBus interface org.freedesktop.DBus.ObjectManager." << endl;
         cout << endl;
         cout << "Options:" << endl;
         cout << "  -a, --all          For each object, list interface and property names." << endl;
+        cout << "  -j, --json         Print output in JSON format." << endl;
         print_common_options ();
     }
 
@@ -345,14 +348,15 @@ namespace {
 appargs_t::appargs_t (int argc, char* argv[])
     : bus {DBUS_BUS_SESSION},
       timeout {DBUS_TIMEOUT_USE_DEFAULT},
-      all {false},
-      activatable {false},
-      print_signature {false},
-      quiet {false},
-      raw {false},
-      recursive {false},
-      eavesdrop {false},
-      json_output {false}
+      list {},
+      call {},
+      introspect {},
+      get {},
+      objects {},
+      listen {},
+      start {},
+      ping {},
+      monitor {}
 {
     static struct option long_options[] = {
         { "system",      no_argument,       0, 'y'},
@@ -367,12 +371,12 @@ appargs_t::appargs_t (int argc, char* argv[])
         { "raw",         no_argument,       0, 'r'},
         { "recursive",   no_argument,       0, 'r'},
         { "eavesdrop",   no_argument,       0, 'e'},
+        { "unique",      no_argument,       0, 'u'},
         { "version",     no_argument,       0, 'v'},
         { "help",        no_argument,       0, 'h'},
         { 0, 0, 0, 0}
     };
-    static const char* arg_format = "yjb:t:axsqrevh";
-    bool be_quiet = false;
+    static const char* arg_format = "yjb:t:axsqreuvh";
     bool help_needed = false;
 
     while (true) {
@@ -383,15 +387,21 @@ appargs_t::appargs_t (int argc, char* argv[])
         case 'y':
             bus = DBUS_BUS_SYSTEM;
             break;
+
         case 'j':
-            json_output = true;
+            call.json_output = true;
+            introspect.json_output = true;
+            get.json_output = true;
+            objects.json_output = true;
+            listen.json_output = true;
             break;
+
         case 'a':
-            all = true;
+            list.all = true;
+            list.unique = false;
+            objects.all = true;
             break;
-        // case 'b':
-        //     bus_address = std::string (optarg);
-        //     break;
+
         case 't':
             timeout = atoi (optarg);
             if (timeout <= 0) {
@@ -399,30 +409,46 @@ appargs_t::appargs_t (int argc, char* argv[])
                 exit (1);
             }
             break;
+
         case 'x':
-            activatable = true;
+            list.activatable = true;
             break;
+
         case 's':
-            print_signature = true;
-            skip = true;
+            call.print_signature = true;
+            get.print_signature = true;
+            listen.print_signature = true;
+            introspect.skip = true;
             break;
+
         case 'q':
-            be_quiet = true;
+            start.quiet = true;
+            ping.quiet = true;
             break;
+
         case 'r':
-            raw = true;
-            recursive = true;
+            introspect.raw = true;
+            listen.recursive = true;
             break;
+
         case 'e':
-            eavesdrop = true;
+            monitor.eavesdrop = true;
             break;
+
+        case 'u':
+            list.unique = true;
+            list.all = false;
+            break;
+
         case 'v': // --version
             cout << DBUS_TOOL_PACKAGE_STRING << std::endl;
             exit (0);
             break;
+
         case 'h': // --help
             help_needed = true;
             break;
+
         default:
             cerr << "Invalid option (--help for help)" << endl;
             break;
@@ -525,7 +551,6 @@ appargs_t::appargs_t (int argc, char* argv[])
             name = ""; // Any signal name
     }
     else if (cmd == "start") {
-        quiet = be_quiet;
         if (optind > argc-1) {
             cerr << "Error: too few arguments (--help for help)" << endl;
             exit (1);
@@ -547,7 +572,6 @@ appargs_t::appargs_t (int argc, char* argv[])
         service = argv[optind++];
     }
     else if (cmd == "ping") {
-        quiet = be_quiet;
         if (optind > argc-1) {
             cerr << "Error: too few arguments (--help for help)" << endl;
             exit (1);

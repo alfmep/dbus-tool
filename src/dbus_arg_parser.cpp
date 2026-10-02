@@ -21,8 +21,6 @@
 #include <regex>
 #include <set>
 
-#include <iostream>
-
 
 #define RE_ASCII_NO_DBL_QUOTE "[\\x20-\\x21\\x23-\\x5b\\x5d-\\x7f]"
 #define RE_ASCII_NO_QUOTE     "[\\x20-\\x26\\x28-\\x5b\\x5d-\\x7f]"
@@ -133,15 +131,6 @@ std::unique_ptr<ultrabus::dbus_type> dbus_arg_parser::parse_dbus_arg_string (
         auto val = parse_dbus_variant_arg_string (signature, value_buffer, sub_len, ok);
         if (ok)
             value = std::move (val);
-    }
-    // else if (signature[0] == '{') {
-    //     // The signature is a dict entry
-    //     auto val = parse_dbus_dict_entry_arg_string (signature, value_buffer, sub_len, ok);
-    //     if (ok)
-    //         value.reset (new ubus::dbus_dict_entry(val));
-    // }
-    else {
-        std::cerr << "Parse a what?!?" << std::endl;
     }
 
     len.first += sub_len.first;

@@ -9,7 +9,7 @@ dbus-tool \- Command-line utility for executing DBus operations.
 
 .SH SYNOPSIS
 .B dbus-tool
-[OPTIONS...] COMMAND [command arguments...]
+[OPTIONS...] COMMAND [arguments...]
 
 
 .SH DESCRIPTION
@@ -45,6 +45,9 @@ List the bus names(services) on the bus.
 .TP
 .B -a, --all
 Also include unique bus names.
+.TP
+.B -u, --unique
+Only list unique bus names.
 .TP
 .B -x, --activatable
 Instead of already connected names, also list all names that can be activated on the bus.
@@ -126,13 +129,18 @@ is a boolean(true|false), string, or a signed integer.
 .B objects <service> [object_path]
 .RS 4
 List all objects beloning to a specific service at an object path.
-If the object_path arguments is omitted, the root object \"/\" is used.
+If the object_path argument is omitted, the root object "/" is used.
+Note that the object at the specified object path needs to implement
+standard DBus interface org.freedesktop.DBus.ObjectManager.
 
 .B OPTIONS
 .nf
 .TP
 .B -a, --all
 For each object, list interface and property names.
+.TP
+.B -j, --json
+Print output in JSON format.
 .RE
 
 
