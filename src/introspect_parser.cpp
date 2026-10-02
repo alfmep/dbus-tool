@@ -21,6 +21,7 @@
 #include <libxml/tree.h>
 #include <cstring>
 #include <iostream>
+#include "config.hpp"
 
 using ip = introspect_parser;
 using std::endl;
@@ -92,22 +93,22 @@ void introspect_parser::print (const node_t& node,
         return;
     }
     if ( ! service.empty())
-        out << "Service: " << service << endl;
+        out << fnt_italic << "Service: " << fnt_reset << fnt_bold << service << fnt_reset << endl;
     if ( ! object_path.empty())
-        out << "Object path: " << object_path << endl;
+        out << fnt_italic << "Object path: " << fnt_reset << fnt_bold << object_path << fnt_reset << endl;
 
     bool first_iface = true;
-    out << "Interfaces:" << endl;
+    out << fnt_italic << "Interfaces:" << fnt_reset << endl;
     for (auto& iface : node.ifaces) {
         if (first_iface)
             first_iface = false;
         else
             out << endl;
-        out << "    " << iface.name << endl;
+        out << "    " << fnt_bold << iface.name << fnt_reset << endl;
 
         auto& methods = iface.methods;
         if (!methods.empty()) {
-            out << "        Methods:" << endl;
+            out << fnt_italic << "        Methods:" << fnt_reset << endl;
             for (auto& m : methods) {
 
                 out << "            " << m.name << endl;
@@ -140,7 +141,7 @@ void introspect_parser::print (const node_t& node,
 
         auto& signals = iface.signals;
         if (!signals.empty()) {
-            out << "        Signals:" << endl;
+            out << fnt_italic << "        Signals:" << fnt_reset << endl;
             for (auto& s : signals) {
                 out << "            " << s.name << endl;
                 if (s.in.empty())
@@ -166,7 +167,7 @@ void introspect_parser::print (const node_t& node,
 
         auto& props = iface.props;
         if (!props.empty()) {
-            out << "        Properties:" << endl;
+            out << fnt_italic << "        Properties:" << fnt_reset << endl;
             for (auto& p : props) {
                 out << "            " << p.name << endl;
                 out << "                Signature: " << p.sig << endl;
@@ -176,7 +177,7 @@ void introspect_parser::print (const node_t& node,
     }
     if (!node.sub_nodes.empty()) {
         out << endl;
-        out << "Nodes:" << endl;
+        out << fnt_italic << "Nodes:" << fnt_reset << endl;
         for (auto& node : node.sub_nodes)
             out << "    " << node << endl;
     }

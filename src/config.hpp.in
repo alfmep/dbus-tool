@@ -19,12 +19,20 @@
 #ifndef DBUS_TOOL_CONFIG_HPP
 #define DBUS_TOOL_CONFIG_HPP
 
+#include <string>
+
+
 #define DBUS_TOOL_VERSION_MAJOR @dbus-tool_VERSION_MAJOR@
 #define DBUS_TOOL_VERSION_MINOR @dbus-tool_VERSION_MINOR@
 #define DBUS_TOOL_VERSION_PATCH @dbus-tool_VERSION_PATCH@
 
 #define DBUS_TOOL_VERSION_STRING "@dbus-tool_VERSION_MAJOR@.@dbus-tool_VERSION_MINOR@.@dbus-tool_VERSION_PATCH@"
 #define DBUS_TOOL_PACKAGE_STRING "@CMAKE_PROJECT_NAME@ @dbus-tool_VERSION_MAJOR@.@dbus-tool_VERSION_MINOR@.@dbus-tool_VERSION_PATCH@"
+
+
+extern std::string fnt_bold;
+extern std::string fnt_italic;
+extern std::string fnt_reset;
 
 
 #endif

@@ -25,15 +25,26 @@
 #include <condition_variable>
 #include <mutex>
 #include <cstring>
+#include <cstdio>
 #include <unistd.h>
 #include <signal.h>
 
 #include "appargs_t.hpp"
 #include "dbus_arg_parser.hpp"
 #include "introspect_parser.hpp"
+#include "config.hpp"
 
 namespace ubus = ultrabus;
 using namespace std;
+
+
+#define FNT_BOLD   "\033[1m"  // Make font bold
+#define FNT_ITALIC "\033[3m"  // Make font italic
+#define FNT_RESET  "\033[0m"  // Reset font and color
+
+std::string fnt_bold {FNT_BOLD};
+std::string fnt_italic {FNT_ITALIC};
+std::string fnt_reset {FNT_RESET};
 
 
 namespace {
@@ -361,16 +372,18 @@ namespace {
             cout << ']';
         }else{
             for (const auto& entry : reply.get()) {
-                cout << entry.first << endl;
-                if (!opt.objects.all)
-                    continue;
-                for (const auto& if_entry : entry.second) {
-                    cout << "    " << if_entry.first << endl;
-                    for (const auto& prop : if_entry.second) {
-                        cout << "        " << prop.first.cast<ubus::dbus_string>().get() << endl;
+                if (!opt.objects.all) {
+                    cout << entry.first << endl;
+                }else{
+                    cout << fnt_bold << entry.first << fnt_reset << endl;
+                    for (const auto& if_entry : entry.second) {
+                        cout << "    " << if_entry.first << endl;
+                        for (const auto& prop : if_entry.second) {
+                            cout << "        " << prop.first.cast<ubus::dbus_string>().get() << endl;
+                        }
                     }
+                    cout << endl;
                 }
-                cout << endl;
             }
         }
         return true;
@@ -394,7 +407,7 @@ namespace {
             if (opt.listen.json_output) {
                 cout << signal.to_json() << endl;
             }else{
-                cout << "Signal       " << signal.name() << endl;
+                cout << fnt_bold << "Signal       " << signal.name() << fnt_reset << endl;
                 cout << "Sender:      " << signal.sender() << endl;
                 cout << "Object path: " << signal.path() << endl;
                 cout << "Interface:   " << signal.interface() << endl;
@@ -634,6 +647,12 @@ namespace {
 //------------------------------------------------------------------------------
 int main (int argc, char* argv[])
 {
+    if (isatty(fileno(stdout)) == 0) {
+        fnt_bold = "";
+        fnt_italic = "";
+        fnt_reset = "";
+    }
+
     appargs_t opt (argc, argv);
 
     auto cmd = commands.find (opt.cmd);
