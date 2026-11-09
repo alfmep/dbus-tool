@@ -88,7 +88,7 @@ namespace {
     std::condition_variable cv;
     std::mutex m;
     volatile bool stop_sleep_loop = false;
-    void stop_signal_handler (int sig)
+    void stop_signal_handler (int /*sig*/)
     {
         stop_sleep_loop = true;
         cv.notify_one ();
@@ -404,6 +404,24 @@ namespace {
 
         ubus::callback_message_filter cmf (conn);
         cmf.set_signal_cb ([&opt, &conn](ubus::message& signal)->bool{
+            if ( ! opt.opath.empty()) {
+                if (opt.listen.recursive) {
+                    if ( ! signal.path().starts_with(opt.opath))
+                        return false;
+                }else{
+                    if (opt.opath != signal.path())
+                        return false;
+                }
+            }
+            if ( ! opt.iface.empty()) {
+                if (opt.iface != signal.interface())
+                    return false;
+            }
+            if ( ! opt.name.empty()) {
+                if (opt.name != signal.name())
+                    return false;
+            }
+
             if (opt.listen.json_output) {
                 cout << signal.to_json() << endl;
             }else{
