@@ -434,7 +434,7 @@ std::unique_ptr<ultrabus::dbus_type> dbus_arg_parser::parse_dbus_struct_arg_stri
 // A variant holding an array of variants: av_[i_1,s_"string",ai_[1,2,3]]
 //------------------------------------------------------------------------------
 std::unique_ptr<ultrabus::dbus_type> dbus_arg_parser::parse_dbus_variant_arg_string (
-        const char* signature,
+        const char* /*signature*/,
         const char* value_buffer,
         std::pair<size_t, size_t>& len,
         bool& ok)
@@ -555,7 +555,7 @@ std::unique_ptr<ultrabus::dbus_type> dbus_arg_parser::parse_dbus_dict_arg_string
         }
         buf_pos += sub_len.second;
 
-        dict.set (*key_ptr, *value_ptr);
+        dict.set_value (*key_ptr, *value_ptr);
 
         if (*buf_pos != ')') {
             ok = false;
