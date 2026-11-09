@@ -21,7 +21,7 @@ cmake_minimum_required (VERSION 3.25)
 # Project name and info
 #
 project (dbus-tool
-    VERSION 1.0.1
+    VERSION 1.0.2
     LANGUAGES CXX
     DESCRIPTION "dbus-tool is a multipurpose command line utility for the DBus interprocess communication system."
 )
