@@ -58,7 +58,7 @@ endif()
 
 # Dependencies
 #
-find_package(ultrabus 1 REQUIRED)
+find_package(ultrabus 1.1 REQUIRED)
 if (ultrabus_FOUND)
     message (STATUS "Found ultrabus version ${ultrabus_VERSION}")
 endif()
