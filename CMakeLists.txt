@@ -42,10 +42,17 @@ include (GNUInstallDirs)
 set (gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
 add_compile_options ("$<${gcc_like_cxx}:$<BUILD_INTERFACE:-pipe;-Wall;-D_GNU_SOURCE>>")
 if (CMAKE_BUILD_TYPE MATCHES "^[Dd]ebug")
-    add_compile_options ("$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Og;-Werror;-fsanitize=address>>")
+    # Build test applications and add flag -Og for GCC et al.
+    add_compile_options ("$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Og;-Wextra;-Werror>>")
+elseif (CMAKE_BUILD_TYPE MATCHES "^[Mm]em[Dd]ebug")
+    # Build test applications, add flag -Og for GCC et al. and enable address sanitizer
+    add_compile_options ("$<${gcc_like_cxx}:$<BUILD_INTERFACE:-Og;-Wextra;-Werror;-fsanitize=address>>")
     add_link_options ("$<${gcc_like_cxx}:$<BUILD_INTERFACE:-fsanitize=address;-static-libasan>>")
 elseif (CMAKE_BUILD_TYPE STREQUAL "")
-    add_compile_options ("$<${gcc_like_cxx}:$<BUILD_INTERFACE:-O2>>")
+    # Default build type, optimize using -O2
+    add_compile_options (
+        "$<${gcc_like_cxx}:$<BUILD_INTERFACE:-O2>>"
+    )
 endif()
 
 
